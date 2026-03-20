@@ -32,3 +32,7 @@ def root():
 @app.get("/api/health")
 def health_check():
     return {"status": "healthy"}
+
+@app.get("/api/test")
+def test():
+    return {"message": "Backend connected successfully!"}
