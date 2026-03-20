@@ -1,0 +1,34 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from database import engine
+from models.models import Base
+import auth
+
+# Создаем таблицы
+Base.metadata.create_all(bind=engine)
+
+app = FastAPI(title="ChadMetrix API")
+
+# Настройка CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "https://chadmetrix.ru",
+        "https://www.chadmetrix.ru"
+    ],
+    allow_credentials=True,
+    allow_methodures=["*"],
+    allow_headers=["*"],
+)
+
+# Подключаем роутеры
+app.include_router(auth.router)
+
+@app.get("/")
+def root():
+    return {"ok": True, "message": "ChadMetrix API is running"}
+
+@app.get("/api/health")
+def health_check():
+    return {"status": "healthy"}
