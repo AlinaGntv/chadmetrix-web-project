@@ -11,7 +11,7 @@ export default function Home() {
   const checkBackend = async () => {
     setLoading(true);
     try {
-      const response = await axios.get("http://localhost:8000/api/test");
+      const response = await axios.get("/api/test");
       setApiMessage(response.data.message);
     } catch (error) {
       setApiMessage("Ошибка подключения к бэкенду");
