@@ -1,22 +1,18 @@
-// src/app/auth/callback/page.tsx
 "use client";
 
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 
-export default function AuthCallback() {
+function AuthCallbackContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const token = searchParams.get('token');
 
     useEffect(() => {
         if (token) {
-            // Сохраняем токен
             localStorage.setItem('token', token);
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-
-            // Перенаправляем на главную
             router.push('/dashboard');
         } else {
             router.push('/login');
@@ -24,4 +20,12 @@ export default function AuthCallback() {
     }, [token, router]);
 
     return <div>Авторизация...</div>;
+}
+
+export default function AuthCallback() {
+    return (
+        <Suspense fallback={<div>Загрузка...</div>}>
+            <AuthCallbackContent />
+        </Suspense>
+    );
 }
