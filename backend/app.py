@@ -18,7 +18,7 @@ app.add_middleware(
         "https://www.chadmetrix.ru"
     ],
     allow_credentials=True,
-    allow_methodures=["*"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
