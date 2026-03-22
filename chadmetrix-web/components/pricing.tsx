@@ -1,121 +1,111 @@
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Check } from "lucide-react"
+// components/pricing.tsx
+"use client";
+
+import { Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 const plans = [
     {
-        name: "Бесплатный",
-        price: "0 ₽",
-        period: "навсегда",
-        description: "Идеально для знакомства с сервисом",
-        features: [
-            "3 анализа в месяц",
-            "Базовый отчет с метриками",
-            "Стандартная обработка",
-            "Email поддержка",
-        ],
+        name: "Базовый",
+        price: "0",
+        description: "Попробуй базовый анализ бесплатно",
+        features: ["1 анализ в день", "5 базовых метрик", "Общий балл", "Базовые рекомендации"],
         cta: "Начать бесплатно",
         popular: false,
     },
     {
         name: "Pro",
-        price: "799 ₽",
-        period: "в месяц",
-        description: "Для тех, кто серьезно занимается саморазвитием",
+        price: "599",
+        description: "Полный анализ для серьёзных результатов",
         features: [
-            "Неограниченное количество анализов",
-            "Полный отчет из 17 метрик",
+            "Безлимитные анализы",
+            "17 детальных метрик",
+            "Сравнение с идеалом",
+            "Персональные рекомендации",
+            "История всех отчётов",
             "Приоритетная обработка",
-            "Детальные рекомендации",
-            "Отслеживание прогресса",
-            "Приоритетная поддержка",
         ],
-        cta: "Выбрать Pro",
+        cta: "Получить Pro",
         popular: true,
     },
     {
         name: "Premium",
-        price: "2490 ₽",
-        period: "в месяц",
-        description: "Для профессионалов и активных пользователей",
+        price: "1499",
+        description: "Для профессионалов индустрии красоты",
         features: [
-            "Все возможности Pro",
+            "Всё из Pro",
             "API доступ",
-            "Кастомизируемые отчеты",
-            "White-label экспорт",
-            "Командная работа",
-            "Выделенная поддержка",
+            "White-label отчёты",
+            "Консультация эксперта",
+            "Экспорт PDF",
+            "Поддержка 24/7",
         ],
-        cta: "Выбрать Premium",
+        cta: "Связаться",
         popular: false,
     },
-]
+];
 
 export function Pricing() {
     return (
-        <section id="pricing" className="bg-black py-24">
-            <div className="mx-auto max-w-6xl px-6">
-                <div className="mb-16 text-center">
-                    <h2 className="text-4xl font-bold text-white md:text-5xl">
-                        Прозрачные{" "}
-                        <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                            тарифы
-                        </span>
+        <section className="py-24 relative">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="text-center mb-16">
+                    <h2 className="text-3xl md:text-5xl font-bold text-gradient mb-4">
+                        Тарифы для каждого
                     </h2>
-                    <p className="mx-auto mt-4 max-w-2xl text-zinc-400">
-                        Выберите тариф, который подходит именно вам. Все планы включают
-                        нашу передовую AI технологию.
+                    <p className="text-gray-400 max-w-2xl mx-auto">
+                        Выберите подходящий план и начните своё путешествие к совершенству уже сегодня
                     </p>
                 </div>
 
-                <div className="grid gap-8 md:grid-cols-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
                     {plans.map((plan) => (
                         <div
                             key={plan.name}
-                            className={`relative overflow-hidden rounded-2xl border p-8 transition-all ${plan.popular
-                                    ? "border-blue-500/50 bg-gradient-to-b from-blue-500/10 to-purple-500/10"
-                                    : "border-white/10 bg-white/5 hover:border-white/20"
+                            className={`relative rounded-2xl p-8 ${plan.popular
+                                    ? "bg-linear-to-b from-blue-600/20 to-purple-600/20 border-2 border-blue-500/50"
+                                    : "glass border border-white/10"
                                 }`}
                         >
                             {plan.popular && (
-                                <div className="absolute top-0 right-0 rounded-bl-xl bg-gradient-to-r from-blue-500 to-purple-500 px-4 py-1 text-xs font-semibold text-white">
-                                    Популярный
+                                <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                                    <span className="bg-linear-to-r from-blue-500 to-purple-500 text-white px-4 py-1 rounded-full text-sm font-medium">
+                                        Популярный
+                                    </span>
                                 </div>
                             )}
 
                             <div className="mb-6">
-                                <h3 className="text-xl font-semibold text-white">{plan.name}</h3>
-                                <p className="mt-2 text-sm text-zinc-500">{plan.description}</p>
+                                <h3 className="text-xl font-semibold text-white mb-2">{plan.name}</h3>
+                                <p className="text-gray-400 text-sm">{plan.description}</p>
                             </div>
 
                             <div className="mb-6">
-                                <span className="text-4xl font-bold text-white">{plan.price}</span>
-                                <span className="ml-2 text-zinc-500">/{plan.period}</span>
+                                <span className="text-4xl font-bold text-white">₽{plan.price}</span>
+                                <span className="text-gray-500">/мес</span>
                             </div>
 
-                            <ul className="mb-8 space-y-3">
+                            <ul className="space-y-3 mb-8">
                                 {plan.features.map((feature) => (
-                                    <li key={feature} className="flex items-center gap-3">
-                                        <Check className="h-5 w-5 flex-shrink-0 text-blue-400" />
-                                        <span className="text-sm text-zinc-300">{feature}</span>
+                                    <li key={feature} className="flex items-start text-gray-300">
+                                        <Check className="w-5 h-5 text-green-400 mr-3 shrink-0" />
+                                        <span className="text-sm">{feature}</span>
                                     </li>
                                 ))}
                             </ul>
 
-                            <Link href="/login">
-                                <Button
-                                    className={`w-full rounded-xl py-6 ${plan.popular
-                                            ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:from-blue-600 hover:to-purple-600"
-                                            : "bg-white/10 text-white hover:bg-white/20"
-                                        }`}
-                                >
-                                    {plan.cta}
-                                </Button>
-                            </Link>
+                            <Button
+                                className={`w-full ${plan.popular
+                                        ? "bg-white text-black hover:bg-gray-200"
+                                        : "glass border-white/20 hover:bg-white/10"
+                                    }`}
+                            >
+                                {plan.cta}
+                            </Button>
                         </div>
                     ))}
                 </div>
             </div>
         </section>
-    )
+    );
 }

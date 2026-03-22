@@ -1,241 +1,149 @@
-"use client"
+// app/reports/[id]/page.tsx
+"use client";
 
-import { useEffect, useState } from "react"
-import { useRouter, useParams } from "next/navigation"
-import Link from "next/link"
-import Image from "next/image"
-import { Navbar } from "@/components/navbar"
-import { Button } from "@/components/ui/button"
-import { useAuth } from "@/lib/hooks/useAuth"
-import { getReport } from "@/lib/api"
-import { ArrowLeft, Download, Share2, TrendingUp, Sparkles } from "lucide-react"
+import { useParams } from "next/navigation";
+import { ArrowLeft, Download, Share2, Info } from "lucide-react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
-interface Metric {
-    name: string
-    score: number
-    description: string
-}
-
-interface ReportData {
-    id: string
-    overallScore: number
-    percentile: number
-    createdAt: string
-    imageUrl?: string
-    metrics: Metric[]
-}
+const metrics = [
+    { name: "Симметрия лица", score: 8.5, description: "Соотношение левой и правой половин лица", max: 10 },
+    { name: "Золотое сечение", score: 7.8, description: "Соответствие пропорциям золотого сечения", max: 10 },
+    { name: "Межглазичное расстояние", score: 9.2, description: "Оптимальное расстояние между зрачками", max: 10 },
+    { name: "Форма лица", score: 8.0, description: "Соотношение ширины и длины лица", max: 10 },
+    { name: "Линия подбородка", score: 7.5, description: "Чёткость и симметрия овала", max: 10 },
+    { name: "Форма носа", score: 8.3, description: "Пропорции носа относительно лица", max: 10 },
+    { name: "Губы", score: 8.8, description: "Соотношение верхней и нижней губы", max: 10 },
+    { name: "Глаза", score: 9.0, description: "Размер, форма и расположение глаз", max: 10 },
+    { name: "Брови", score: 7.2, description: "Форма и симметрия бровей", max: 10 },
+    { name: "Скулы", score: 8.6, description: "Высота и выраженность скул", max: 10 },
+    { name: "Кожа", score: 8.4, description: "Однородность тона и текстуры", max: 10 },
+    { name: "Лоб", score: 7.9, description: "Пропорции и форма лба", max: 10 },
+    { name: "Уши", score: 8.1, description: "Симметрия и прилегание к голове", max: 10 },
+    { name: "Шея", score: 8.7, description: "Пропорции шеи к лицу", max: 10 },
+    { name: "Улыбка", score: 9.1, description: "Симметрия и эстетика улыбки", max: 10 },
+    { name: "Профиль", score: 7.6, description: "Соотношение лба, носа и подбородка", max: 10 },
+    { name: "Гармония", score: 8.5, description: "Общая сбалансированность черт", max: 10 },
+];
 
 export default function ReportDetailPage() {
-    const router = useRouter()
-    const params = useParams()
-    const { isLoading: authLoading, isAuthenticated } = useAuth()
-    const [report, setReport] = useState<ReportData | null>(null)
-    const [isLoading, setIsLoading] = useState(true)
-
-    useEffect(() => {
-        if (!authLoading && !isAuthenticated) {
-            router.push("/login")
-            return
-        }
-
-        if (isAuthenticated && params.id) {
-            getReport(params.id as string)
-                .then(setReport)
-                .catch(console.error)
-                .finally(() => setIsLoading(false))
-        }
-    }, [authLoading, isAuthenticated, router, params.id])
+    const params = useParams();
+    const totalScore = (metrics.reduce((acc, m) => acc + m.score, 0) / metrics.length).toFixed(1);
 
     const getScoreColor = (score: number) => {
-        if (score >= 80) return "text-green-400"
-        if (score >= 60) return "text-blue-400"
-        if (score >= 40) return "text-yellow-400"
-        return "text-red-400"
-    }
+        if (score >= 8) return "from-green-500 to-emerald-500";
+        if (score >= 6) return "from-yellow-500 to-orange-500";
+        return "from-red-500 to-pink-500";
+    };
 
-    const getScoreGradient = (score: number) => {
-        if (score >= 80) return "from-green-500 to-emerald-500"
-        if (score >= 60) return "from-blue-500 to-cyan-500"
-        if (score >= 40) return "from-yellow-500 to-orange-500"
-        return "from-red-500 to-pink-500"
-    }
-
-    if (isLoading) {
-        return (
-            <main className="min-h-screen bg-black">
-                <Navbar />
-                <div className="flex min-h-screen items-center justify-center pt-16">
-                    <div className="text-center">
-                        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
-                        <p className="mt-4 text-zinc-500">Загрузка отчета...</p>
-                    </div>
-                </div>
-            </main>
-        )
-    }
-
-    if (!report) {
-        return (
-            <main className="min-h-screen bg-black">
-                <Navbar />
-                <div className="flex min-h-screen items-center justify-center pt-16">
-                    <div className="text-center">
-                        <h2 className="text-xl font-bold text-white">Отчет не найден</h2>
-                        <Link href="/reports">
-                            <Button className="mt-4 rounded-xl bg-white text-black hover:bg-zinc-200">
-                                К списку отчетов
-                            </Button>
-                        </Link>
-                    </div>
-                </div>
-            </main>
-        )
-    }
-
-    const overallScore = report.overallScore
-    const overallPercent = overallScore * 10
+    const getScoreTextColor = (score: number) => {
+        if (score >= 8) return "text-green-400";
+        if (score >= 6) return "text-yellow-400";
+        return "text-red-400";
+    };
 
     return (
-        <main className="min-h-screen bg-black">
-            <Navbar />
+        <div className="min-h-screen pt-24 pb-12 px-4 sm:px-6 lg:px-8">
+            <div className="max-w-5xl mx-auto">
+                <div className="flex items-center space-x-4 mb-8">
+                    <Link href="/reports">
+                        <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
+                            <ArrowLeft className="w-4 h-4 mr-2" />
+                            Назад
+                        </Button>
+                    </Link>
+                </div>
 
-            <div className="mx-auto max-w-6xl px-6 pt-24 pb-16">
-                <Link
-                    href="/reports"
-                    className="mb-8 inline-flex items-center gap-2 text-sm text-zinc-500 transition-colors hover:text-white"
-                >
-                    <ArrowLeft className="h-4 w-4" />
-                    К списку отчетов
-                </Link>
-
-                <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <div>
-                        <h1 className="text-3xl font-bold text-white md:text-4xl">
-                            Отчет{" "}
-                            <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                                об анализе
-                            </span>
-                        </h1>
-                        <p className="mt-2 text-zinc-500">
-                            {new Date(report.createdAt).toLocaleDateString("ru-RU", {
-                                year: "numeric",
-                                month: "long",
-                                day: "numeric",
-                            })}
-                        </p>
+                <div className="glass rounded-3xl p-8 border border-white/10 mb-8">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between mb-8">
+                        <div>
+                            <h1 className="text-3xl font-bold text-white mb-2">Отчёт анализа #{params.id}</h1>
+                            <p className="text-gray-400">Создан 23 марта 2024 в 14:30</p>
+                        </div>
+                        <div className="flex space-x-3 mt-4 md:mt-0">
+                            <Button variant="outline" size="sm" className="glass border-white/20">
+                                <Share2 className="w-4 h-4 mr-2" />
+                                Поделиться
+                            </Button>
+                            <Button variant="outline" size="sm" className="glass border-white/20">
+                                <Download className="w-4 h-4 mr-2" />
+                                Скачать PDF
+                            </Button>
+                        </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
-                        <Button
-                            variant="outline"
-                            className="rounded-xl border-white/20 bg-white/5 text-white hover:bg-white/10"
-                        >
-                            <Share2 className="mr-2 h-4 w-4" />
-                            Поделиться
-                        </Button>
-                        <Button
-                            variant="outline"
-                            className="rounded-xl border-white/20 bg-white/5 text-white hover:bg-white/10"
-                        >
-                            <Download className="mr-2 h-4 w-4" />
-                            Экспорт
-                        </Button>
+                    <div className="flex items-center justify-center py-8">
+                        <div className="text-center">
+                            <div className="relative inline-flex items-center justify-center">
+                                <svg className="w-40 h-40 transform -rotate-90">
+                                    <circle
+                                        cx="80"
+                                        cy="80"
+                                        r="70"
+                                        stroke="currentColor"
+                                        strokeWidth="8"
+                                        fill="transparent"
+                                        className="text-gray-800"
+                                    />
+                                    <circle
+                                        cx="80"
+                                        cy="80"
+                                        r="70"
+                                        stroke="currentColor"
+                                        strokeWidth="8"
+                                        fill="transparent"
+                                        strokeDasharray={440}
+                                        strokeDashoffset={440 - (440 * Number(totalScore)) / 10}
+                                        className={`${getScoreTextColor(Number(totalScore))} transition-all duration-1000`}
+                                    />
+                                </svg>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                    <span className={`text-5xl font-bold ${getScoreTextColor(Number(totalScore))}`}>
+                                        {totalScore}
+                                    </span>
+                                    <span className="text-gray-500 text-sm">из 10</span>
+                                </div>
+                            </div>
+                            <p className="mt-4 text-lg text-gray-300">Общая оценка</p>
+                        </div>
                     </div>
                 </div>
 
-                <div className="grid gap-8 lg:grid-cols-3">
-                    <div className="lg:col-span-1">
-                        <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5">
-                            {report.imageUrl && (
-                                <div className="relative aspect-square w-full">
-                                    <Image
-                                        src={report.imageUrl}
-                                        alt="Анализируемое фото"
-                                        fill
-                                        className="object-cover"
-                                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                                        priority={false}
-                                    />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {metrics.map((metric, index) => (
+                        <div key={index} className="glass rounded-xl p-6 border border-white/10 hover:border-white/20 transition-colors">
+                            <div className="flex items-start justify-between mb-4">
+                                <div>
+                                    <h3 className="font-semibold text-white mb-1">{metric.name}</h3>
+                                    <p className="text-sm text-gray-500">{metric.description}</p>
                                 </div>
-                            )}
-
-                            <div className="p-6">
-                                <div className="text-center">
-                                    <div className="mb-2 flex items-center justify-center gap-2">
-                                        <Sparkles className="h-5 w-5 text-blue-400" />
-                                        <span className="text-sm text-zinc-500">Общая оценка</span>
-                                    </div>
-                                    <div
-                                        className={`text-6xl font-bold ${getScoreColor(overallPercent)}`}
-                                    >
-                                        {overallScore.toFixed(1)}
-                                    </div>
-                                    <div className="mt-2 text-zinc-500">из 10</div>
-                                </div>
-
-                                <div className="mt-6 flex items-center justify-center gap-2 rounded-xl bg-white/5 py-3">
-                                    <TrendingUp className="h-5 w-5 text-green-400" />
-                                    <span className="text-sm text-zinc-300">
-                                        Топ {100 - report.percentile}% пользователей
+                                <div className="flex items-center space-x-2">
+                                    <span className={`text-2xl font-bold ${getScoreTextColor(metric.score)}`}>
+                                        {metric.score}
                                     </span>
+                                    <Info className="w-4 h-4 text-gray-600" />
                                 </div>
                             </div>
-                        </div>
-                    </div>
-
-                    <div className="lg:col-span-2">
-                        <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-                            <h2 className="mb-6 text-lg font-semibold text-white">
-                                Детальные метрики
-                            </h2>
-
-                            <div className="space-y-6">
-                                {report.metrics.map((metric) => (
-                                    <div key={metric.name}>
-                                        <div className="mb-2 flex items-center justify-between">
-                                            <span className="text-sm font-medium text-white">
-                                                {metric.name}
-                                            </span>
-                                            <span
-                                                className={`text-sm font-bold ${getScoreColor(metric.score)}`}
-                                            >
-                                                {metric.score}%
-                                            </span>
-                                        </div>
-                                        <div className="mb-2 h-3 overflow-hidden rounded-full bg-white/10">
-                                            <div
-                                                className={`h-full rounded-full bg-gradient-to-r ${getScoreGradient(metric.score)}`}
-                                                style={{ width: `${metric.score}%` }}
-                                            />
-                                        </div>
-                                        <p className="text-xs text-zinc-500">{metric.description}</p>
-                                    </div>
-                                ))}
+                            <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+                                <div
+                                    className={`h-full bg-linear-to-r ${getScoreColor(metric.score)} transition-all duration-500`}
+                                    style={{ width: `${(metric.score / metric.max) * 100}%` }}
+                                />
                             </div>
                         </div>
+                    ))}
+                </div>
 
-                        <div className="mt-6 rounded-2xl border border-white/10 bg-gradient-to-br from-blue-500/10 to-purple-500/10 p-6">
-                            <h2 className="mb-4 text-lg font-semibold text-white">
-                                Рекомендации
-                            </h2>
-                            <ul className="space-y-3 text-sm text-zinc-300">
-                                <li className="flex items-start gap-2">
-                                    <span className="text-blue-400">•</span>
-                                    Сосредоточьтесь на уходе за кожей для улучшения показателей качества кожи
-                                </li>
-                                <li className="flex items-start gap-2">
-                                    <span className="text-blue-400">•</span>
-                                    Рассмотрите упражнения для лица для улучшения линии челюсти
-                                </li>
-                                <li className="flex items-start gap-2">
-                                    <span className="text-blue-400">•</span>
-                                    Поддерживайте водный баланс для лучшей общей гармонии лица
-                                </li>
-                            </ul>
-                        </div>
+                <div className="mt-8 glass rounded-2xl p-8 border border-white/10">
+                    <h2 className="text-xl font-semibold text-white mb-4">Рекомендации по улучшению</h2>
+                    <div className="space-y-4 text-gray-300">
+                        <p>• Для улучшения симметрии лица рекомендуем специальную гимнастику для мышц лица (фейсбилдинг)</p>
+                        <p>• Добейтесь лучшего качества кожи с помощью регулярного ухода и достаточного увлажнения</p>
+                        <p>• Форма бровей может быть скорректирована для достижения более гармоничного вида</p>
+                        <p>• Ваши пропорции близки к идеальным, продолжайте поддерживать текущий уход</p>
                     </div>
                 </div>
             </div>
-        </main>
-    )
+        </div>
+    );
 }

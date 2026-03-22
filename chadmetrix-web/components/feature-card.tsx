@@ -1,24 +1,34 @@
-import { LucideIcon } from "lucide-react"
+// components/feature-card.tsx
+import { LucideIcon } from "lucide-react";
 
 interface FeatureCardProps {
-    title: string
-    description: string
-    icon: LucideIcon
+    icon: LucideIcon;
+    title: string;
+    description: string;
+    metric?: string;
+    value?: string;
 }
 
-export function FeatureCard({ title, description, icon: Icon }: FeatureCardProps) {
+export function FeatureCard({ icon: Icon, title, description, metric, value }: FeatureCardProps) {
     return (
-        <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm transition-all hover:border-white/20 hover:bg-white/10">
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-transparent to-purple-500/10 opacity-0 transition-opacity group-hover:opacity-100" />
+        <div className="group relative glass rounded-2xl p-6 hover:bg-white/10 transition-all duration-300 hover:-translate-y-1">
+            <div className="absolute inset-0 bg-linear-to-br from-blue-500/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl" />
 
             <div className="relative">
-                <div className="mb-4 inline-flex rounded-xl bg-white/10 p-3">
-                    <Icon className="h-6 w-6 text-blue-400" />
+                <div className="w-12 h-12 rounded-xl bg-linear-to-br from-gray-800 to-gray-900 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                    <Icon className="w-6 h-6 text-white" />
                 </div>
 
-                <h3 className="mb-2 text-lg font-semibold text-white">{title}</h3>
-                <p className="text-sm text-zinc-400 leading-relaxed">{description}</p>
+                <h3 className="text-lg font-semibold mb-2 text-white">{title}</h3>
+                <p className="text-gray-400 text-sm leading-relaxed mb-4">{description}</p>
+
+                {metric && value && (
+                    <div className="flex items-center justify-between pt-4 border-t border-white/10">
+                        <span className="text-xs text-gray-500 uppercase tracking-wider">{metric}</span>
+                        <span className="text-lg font-bold text-blue-400">{value}</span>
+                    </div>
+                )}
             </div>
         </div>
-    )
+    );
 }

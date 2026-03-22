@@ -1,126 +1,85 @@
-"use client"
+// components/navbar.tsx
+"use client";
 
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { useAuth } from "@/lib/hooks/useAuth"
-import { Menu, X, Sparkles } from "lucide-react"
-import { useState } from "react"
+import Link from "next/link";
+import { useState } from "react";
+import { Menu, X, User, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export function Navbar() {
-    const { isAuthenticated, logout } = useAuth()
-    const [isOpen, setIsOpen] = useState(false)
+    const [isOpen, setIsOpen] = useState(false);
+    const [isLoggedIn] = useState(false); // Заглушка для авторизации
 
     return (
-        <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-black/50 backdrop-blur-xl">
-            <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-                <Link href="/" className="flex items-center gap-2 text-xl font-bold tracking-tight text-white">
-                    <Sparkles className="h-5 w-5 text-blue-400" />
-                    ChadMetrix
-                </Link>
+        <nav className="fixed top-0 w-full z-50 glass border-b border-white/10">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="flex justify-between items-center h-16">
+                    <Link href="/" className="flex items-center space-x-2 group">
+                        <div className="w-8 h-8 rounded-lg bg-linear-to-br from-white to-gray-600 flex items-center justify-center">
+                            <Sparkles className="w-5 h-5 text-black" />
+                        </div>
+                        <span className="text-xl font-bold tracking-tight text-gradient">
+                            ChadMetrix
+                        </span>
+                    </Link>
 
-                <div className="hidden items-center gap-6 md:flex">
-                    <Link
-                        href="/#features"
-                        className="text-sm text-zinc-400 transition-colors hover:text-white"
-                    >
-                        Возможности
-                    </Link>
-                    <Link
-                        href="/#pricing"
-                        className="text-sm text-zinc-400 transition-colors hover:text-white"
-                    >
-                        Тарифы
-                    </Link>
-                    <Link
-                        href="/#faq"
-                        className="text-sm text-zinc-400 transition-colors hover:text-white"
-                    >
-                        FAQ
-                    </Link>
-                    {isAuthenticated ? (
-                        <>
-                            <Link href="/dashboard">
-                                <Button className="rounded-xl bg-white text-black hover:bg-zinc-200">
-                                    Личный кабинет
-                                </Button>
-                            </Link>
-                            <Button
-                                onClick={logout}
-                                variant="outline"
-                                className="rounded-xl border-white/20 bg-white/5 text-white hover:bg-white/10"
-                            >
-                                Выйти
+                    <div className="hidden md:flex items-center space-x-8">
+                        <Link href="/" className="text-sm text-gray-300 hover:text-white transition-colors">
+                            Главная
+                        </Link>
+                        <Link href="/analysis/new" className="text-sm text-gray-300 hover:text-white transition-colors">
+                            Анализ
+                        </Link>
+                        <Link href="/reports" className="text-sm text-gray-300 hover:text-white transition-colors">
+                            Отчёты
+                        </Link>
+                        <Link href="/dashboard" className="text-sm text-gray-300 hover:text-white transition-colors">
+                            Кабинет
+                        </Link>
+                    </div>
+
+                    <div className="hidden md:flex items-center space-x-4">
+                        {isLoggedIn ? (
+                            <Button variant="ghost" size="sm" className="glass">
+                                <User className="w-4 h-4 mr-2" />
+                                Профиль
                             </Button>
-                        </>
-                    ) : (
-                        <Link href="/login">
-                            <Button className="rounded-xl bg-white text-black hover:bg-zinc-200">
-                                Начать
-                            </Button>
-                        </Link>
-                    )}
-                </div>
-
-                <button
-                    className="text-white md:hidden"
-                    onClick={() => setIsOpen(!isOpen)}
-                >
-                    {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-                </button>
-            </div>
-
-            {isOpen && (
-                <div className="border-t border-white/10 bg-black/90 backdrop-blur-xl md:hidden">
-                    <div className="flex flex-col gap-4 px-6 py-4">
-                        <Link
-                            href="/#features"
-                            className="text-sm text-zinc-400 transition-colors hover:text-white"
-                            onClick={() => setIsOpen(false)}
-                        >
-                            Возможности
-                        </Link>
-                        <Link
-                            href="/#pricing"
-                            className="text-sm text-zinc-400 transition-colors hover:text-white"
-                            onClick={() => setIsOpen(false)}
-                        >
-                            Тарифы
-                        </Link>
-                        <Link
-                            href="/#faq"
-                            className="text-sm text-zinc-400 transition-colors hover:text-white"
-                            onClick={() => setIsOpen(false)}
-                        >
-                            FAQ
-                        </Link>
-                        {isAuthenticated ? (
-                            <>
-                                <Link href="/dashboard" onClick={() => setIsOpen(false)}>
-                                    <Button className="w-full rounded-xl bg-white text-black hover:bg-zinc-200">
-                                        Личный кабинет
-                                    </Button>
-                                </Link>
-                                <Button
-                                    onClick={() => {
-                                        logout()
-                                        setIsOpen(false)
-                                    }}
-                                    variant="outline"
-                                    className="w-full rounded-xl border-white/20 bg-white/5 text-white hover:bg-white/10"
-                                >
-                                    Выйти
-                                </Button>
-                            </>
                         ) : (
-                            <Link href="/login" onClick={() => setIsOpen(false)}>
-                                <Button className="w-full rounded-xl bg-white text-black hover:bg-zinc-200">
-                                    Начать
+                            <Link href="/login">
+                                <Button variant="outline" size="sm" className="glass hover:bg-white/10">
+                                    Войти
                                 </Button>
                             </Link>
                         )}
                     </div>
+
+                    <button
+                        className="md:hidden p-2"
+                        onClick={() => setIsOpen(!isOpen)}
+                    >
+                        {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+                    </button>
+                </div>
+            </div>
+
+            {isOpen && (
+                <div className="md:hidden glass border-t border-white/10">
+                    <div className="px-4 pt-2 pb-3 space-y-1">
+                        <Link href="/" className="block px-3 py-2 text-base text-gray-300 hover:text-white">
+                            Главная
+                        </Link>
+                        <Link href="/analysis/new" className="block px-3 py-2 text-base text-gray-300 hover:text-white">
+                            Анализ
+                        </Link>
+                        <Link href="/reports" className="block px-3 py-2 text-base text-gray-300 hover:text-white">
+                            Отчёты
+                        </Link>
+                        <Link href="/login" className="block px-3 py-2 text-base text-blue-400">
+                            Войти
+                        </Link>
+                    </div>
                 </div>
             )}
         </nav>
-    )
+    );
 }
