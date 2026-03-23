@@ -27,7 +27,7 @@ function CallbackContent() {
     return (
         <div className="min-h-screen flex items-center justify-center">
             <div className="text-center">
-                <Loader2 className="w-12 h-12 animate-spin text-blue-500 mx-auto mb-4" />
+                <Loader2 className="w-12 h-12 animate-spin text-gray-500 mx-auto mb-4" />
                 <h1 className="text-2xl font-bold text-white mb-2">Вход в систему...</h1>
                 <p className="text-gray-400">Пожалуйста, подождите</p>
             </div>
@@ -40,7 +40,7 @@ export default function AuthCallbackPage() {
         <Suspense fallback={
             <div className="min-h-screen flex items-center justify-center">
                 <div className="text-center">
-                    <Loader2 className="w-12 h-12 animate-spin text-blue-500 mx-auto mb-4" />
+                    <Loader2 className="w-12 h-12 animate-spin text-gray-500 mx-auto mb-4" />
                     <h1 className="text-2xl font-bold text-white mb-2">Загрузка...</h1>
                 </div>
             </div>

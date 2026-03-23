@@ -1,54 +1,58 @@
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { getCurrentUser, logout as apiLogout } from "@/lib/api"
+// lib/hooks/useAuth.ts
+"use client";
+
+import { useState, useEffect } from "react";
+import { api, getCurrentUser } from "@/lib/api";
 
 interface User {
-    id: number
-    email: string
-    full_name: string
-    avatar_url?: string
+    id: string;
+    email: string;
+    full_name: string;
+    avatar_url: string;
+    tariff_type: string;
+    photo_uses_remaining: number;
 }
 
 export function useAuth() {
-    const [user, setUser] = useState<User | null>(null)
-    const [isLoading, setIsLoading] = useState(true)
-    const router = useRouter()
+    const [user, setUser] = useState<User | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        checkAuth()
-    }, [])
+        checkAuth();
+    }, []);
 
     const checkAuth = async () => {
         try {
-            const data = await getCurrentUser()
-            setUser(data)
-        } catch {
-            // Используем _ вместо error, так как ошибка нам не нужна
-            setUser(null)
+            const userData = await getCurrentUser();
+            setUser(userData);
+        } catch (error) {
+            setUser(null);
         } finally {
-            setIsLoading(false)
+            setIsLoading(false);
         }
-    }
+    };
 
     const loginWithGoogle = () => {
-        window.location.href = "/api/auth/login/google"
-    }
+        window.location.href = "/api/auth/login/google";
+    };
 
     const logout = async () => {
         try {
-            await apiLogout()
-            setUser(null)
-            router.push("/login")
+            await api.post("/auth/logout");
+            document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+            setUser(null);
+            window.location.href = "/";
         } catch (error) {
-            console.error("Ошибка выхода:", error)
+            console.error("Logout error:", error);
         }
-    }
+    };
 
     return {
         user,
         isLoading,
+        isAuthenticated: !!user,
         loginWithGoogle,
         logout,
-        isAuthenticated: !!user,
-    }
+        refreshUser: checkAuth
+    };
 }
