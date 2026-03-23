@@ -1,6 +1,7 @@
 // components/footer.tsx
 import Link from "next/link";
-import { Sparkles, Github, Twitter, Instagram } from "lucide-react";
+import Image from "next/image";
+import { Github, Twitter, Instagram } from "lucide-react";
 
 export function Footer() {
     return (
@@ -8,9 +9,20 @@ export function Footer() {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
                     <div className="col-span-1 md:col-span-2">
-                        <Link href="/" className="flex items-center space-x-2 mb-4">
-                            <Sparkles className="w-6 h-6 text-white" />
-                            <span className="text-xl font-bold">chadmetrix</span>
+                        <Link href="/" className="flex items-center space-x-3 mb-4 group">
+                            {/* Логотип с таким же стилем */}
+                            <div className="relative w-8 h-8 rounded-full overflow-hidden ring-2 ring-white/20 group-hover:ring-white/40 transition-all shadow-[0_0_15px_rgba(255,255,255,0.3)]">
+                                <Image
+                                    src="/logo.png"
+                                    alt="ChadMetrix"
+                                    fill
+                                    className="object-cover"
+                                />
+                            </div>
+                            <span className="text-xl font-bold tracking-tight">
+                                <span className="text-white">chad</span>
+                                <span className="text-gray-500">metrix</span>
+                            </span>
                         </Link>
                         <p className="text-gray-400 text-sm max-w-xs">
                             Профессиональный ИИ-анализ внешности по 17 метрикам качества.

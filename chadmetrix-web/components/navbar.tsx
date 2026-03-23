@@ -16,7 +16,8 @@ export function Navbar() {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex justify-between items-center h-16">
                     <Link href="/" className="flex items-center space-x-3 group">
-                        <div className="relative w-8 h-8 rounded-lg overflow-hidden">
+                        {/* Логотип с рамкой и свечением */}
+                        <div className="relative w-9 h-9 rounded-full overflow-hidden ring-2 ring-white/20 group-hover:ring-white/40 transition-all shadow-[0_0_15px_rgba(255,255,255,0.3)]">
                             <Image
                                 src="/logo.png"
                                 alt="ChadMetrix"
@@ -26,8 +27,8 @@ export function Navbar() {
                             />
                         </div>
                         <span className="text-xl font-bold tracking-tight">
-                            <span className="text-white group-hover:text-gray-300 transition-colors">Chad</span>
-                            <span className="text-gray-500 group-hover:text-gray-400 transition-colors">Metrix</span>
+                            <span className="text-white group-hover:text-gray-300 transition-colors">chad</span>
+                            <span className="text-gray-500 group-hover:text-gray-400 transition-colors">metrix</span>
                         </span>
                     </Link>
 
