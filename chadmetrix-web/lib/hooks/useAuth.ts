@@ -25,7 +25,8 @@ export function useAuth() {
         try {
             const userData = await getCurrentUser();
             setUser(userData);
-        } catch (error) {
+        } catch {
+            // Убрал 'error' — он не использовался
             setUser(null);
         } finally {
             setIsLoading(false);
@@ -42,8 +43,9 @@ export function useAuth() {
             document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
             setUser(null);
             window.location.href = "/";
-        } catch (error) {
-            console.error("Logout error:", error);
+        } catch {
+            // Убрал 'error' — он не использовался
+            console.error("Logout error");
         }
     };
 
