@@ -1,47 +1,61 @@
-// components/pricing.tsx
 "use client";
 
-import { Check } from "lucide-react";
+import { Check, Gift } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const plans = [
     {
-        name: "Базовый",
-        price: "0",
-        description: "Попробуй базовый анализ бесплатно",
-        features: ["1 анализ в день", "5 базовых метрик", "Общий балл", "Базовые рекомендации"],
-        cta: "Начать бесплатно",
-        popular: false,
-    },
-    {
-        name: "Pro",
-        price: "599",
-        description: "Полный анализ для серьёзных результатов",
+        name: "Разовый анализ",
+        price: "199",
+        period: "разово",
+        description: "Полный отчёт по одному фото в анфас",
         features: [
-            "Безлимитные анализы",
             "17 детальных метрик",
-            "Сравнение с идеалом",
-            "Персональные рекомендации",
-            "История всех отчётов",
-            "Приоритетная обработка",
+            "Фото в анфас",
+            "Персональный роадмап на 30 дней",
+            "Список улучшений по неделям",
+            "Сохранение отчёта в личном кабинете",
+            "20% скидка за отзыв"
         ],
-        cta: "Получить Pro",
-        popular: true,
+        cta: "Купить за 199₽",
+        popular: false,
+        bonus: null
     },
     {
-        name: "Premium",
-        price: "1499",
-        description: "Для профессионалов индустрии красоты",
+        name: "Подписка HTN",
+        price: "249",
+        period: "месяц",
+        description: "Для тех, кто отслеживает прогресс",
         features: [
-            "Всё из Pro",
-            "API доступ",
-            "White-label отчёты",
-            "Консультация эксперта",
-            "Экспорт PDF",
-            "Поддержка 24/7",
+            "2 полных анализа в месяц",
+            "Анфас + профиль (2 фото)",
+            "1 бесплатное сравнение «до/после»",
+            "История всех анализов с графиками",
+            "Отслеживание динамики по метрикам",
+            "Push-напоминания (14/30 дней)",
+            "Приоритетная обработка"
         ],
-        cta: "Связаться",
+        cta: "Оформить подписку",
+        popular: true,
+        bonus: "Выгода 149₽"
+    },
+    {
+        name: "Подписка CHAD",
+        price: "349",
+        period: "месяц",
+        description: "Максимальный результат",
+        features: [
+            "Всё из подписки HTN",
+            "Акцентированный отчёт на слабые зоны",
+            "Углублённый роадмап по проблемным метрикам",
+            "3 сравнения «до/после» в месяц",
+            "Персональные push-уведомления",
+            "Ранний доступ к новым фичам",
+            "Поддержка 24/7"
+        ],
+        cta: "Стать CHAD",
         popular: false,
+        bonus: "Лучший выбор"
     },
 ];
 
@@ -51,10 +65,11 @@ export function Pricing() {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="text-center mb-16">
                     <h2 className="text-3xl md:text-5xl font-bold text-gradient mb-4">
-                        Тарифы для каждого
+                        Тарифы
                     </h2>
                     <p className="text-gray-400 max-w-2xl mx-auto">
-                        Выберите подходящий план и начните своё путешествие к совершенству уже сегодня
+                        Разовый анализ для знакомства или подписка для отслеживания прогресса.
+                        Пригласи друга — получи бесплатный анализ в подарок.
                     </p>
                 </div>
 
@@ -63,14 +78,22 @@ export function Pricing() {
                         <div
                             key={plan.name}
                             className={`relative rounded-2xl p-8 ${plan.popular
-                                    ? "glass-strong border border-white/20"
+                                    ? "glass-strong border border-white/20 scale-105 z-10"
                                     : "glass border border-white/10"
                                 }`}
                         >
                             {plan.popular && (
                                 <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                                    <span className="bg-white text-black px-4 py-1 rounded-full text-sm font-medium">
+                                    <span className="bg-white text-black px-4 py-1 rounded-full text-sm font-bold">
                                         Популярный
+                                    </span>
+                                </div>
+                            )}
+
+                            {plan.bonus && !plan.popular && (
+                                <div className="absolute -top-4 right-4">
+                                    <span className="glass px-3 py-1 rounded-full text-xs text-gray-300 border border-white/10">
+                                        {plan.bonus}
                                     </span>
                                 </div>
                             )}
@@ -80,9 +103,9 @@ export function Pricing() {
                                 <p className="text-gray-400 text-sm">{plan.description}</p>
                             </div>
 
-                            <div className="mb-6">
+                            <div className="mb-6 flex items-baseline">
                                 <span className="text-4xl font-bold text-white">₽{plan.price}</span>
-                                <span className="text-gray-500">/мес</span>
+                                <span className="text-gray-500 ml-2">/{plan.period}</span>
                             </div>
 
                             <ul className="space-y-3 mb-8">
@@ -104,6 +127,19 @@ export function Pricing() {
                             </Button>
                         </div>
                     ))}
+                </div>
+
+                {/* Реферальный блок */}
+                <div className="mt-12 glass rounded-2xl p-8 border border-white/10 max-w-3xl mx-auto text-center">
+                    <Gift className="w-8 h-8 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-white mb-2">Пригласи друга — получи бонус</h3>
+                    <p className="text-gray-400 text-sm mb-4">
+                        Отправь реферальную ссылку. Когда друг оплатит первый анализ,
+                        ты получишь +1 бесплатный анализ на свой баланс.
+                    </p>
+                    <Button variant="outline" className="glass border-white/20">
+                        Получить реферальную ссылку
+                    </Button>
                 </div>
             </div>
         </section>
