@@ -63,13 +63,13 @@ export function Pricing() {
                         <div
                             key={plan.name}
                             className={`relative rounded-2xl p-8 ${plan.popular
-                                    ? "bg-linear-to-b from-blue-600/20 to-purple-600/20 border-2 border-blue-500/50"
+                                    ? "glass-strong border border-white/20"
                                     : "glass border border-white/10"
                                 }`}
                         >
                             {plan.popular && (
                                 <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                                    <span className="bg-linear-to-r from-blue-500 to-purple-500 text-white px-4 py-1 rounded-full text-sm font-medium">
+                                    <span className="bg-white text-black px-4 py-1 rounded-full text-sm font-medium">
                                         Популярный
                                     </span>
                                 </div>
@@ -88,7 +88,7 @@ export function Pricing() {
                             <ul className="space-y-3 mb-8">
                                 {plan.features.map((feature) => (
                                     <li key={feature} className="flex items-start text-gray-300">
-                                        <Check className="w-5 h-5 text-green-400 mr-3 shrink-0" />
+                                        <Check className="w-5 h-5 text-white mr-3 shrink-0" />
                                         <span className="text-sm">{feature}</span>
                                     </li>
                                 ))}

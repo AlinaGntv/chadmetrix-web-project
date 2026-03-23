@@ -39,7 +39,7 @@ export function ReportCard({ id, score, date, thumbnail, metricsCount = 17 }: Re
                             )}
                         </div>
                         <div>
-                            <h3 className="font-semibold text-white group-hover:text-blue-400 transition-colors">
+                            <h3 className="font-semibold text-white group-hover:text-gray-300 transition-colors">
                                 Анализ #{id.slice(-4)}
                             </h3>
                             <div className="flex items-center text-sm text-gray-500">
@@ -67,7 +67,7 @@ export function ReportCard({ id, score, date, thumbnail, metricsCount = 17 }: Re
 
                 <div className="mt-4 h-2 bg-gray-800 rounded-full overflow-hidden">
                     <div
-                        className="h-full bg-linear-to-r from-blue-500 to-purple-500 transition-all duration-500"
+                        className="h-full bg-linear-to-r from-gray-400 via-gray-300 to-white transition-all duration-500"
                         style={{ width: `${score * 10}%` }}
                     />
                 </div>

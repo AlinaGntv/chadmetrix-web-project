@@ -12,13 +12,13 @@
   --secondary-foreground: 0 0% 100%;
   --muted: 0 0% 15%;
   --muted-foreground: 0 0% 65%;
-  --accent: 220 90% 60%;
+  --accent: 0 0% 50%;
   --accent-foreground: 0 0% 100%;
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
   --border: 0 0% 20%;
   --input: 0 0% 20%;
-  --ring: 220 90% 60%;
+  --ring: 0 0% 100%;
   --radius: 0.75rem;
 }
 
@@ -32,7 +32,7 @@
     color: white;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background-image: radial-gradient(ellipse at top, #1a1a2e 0%, #000000 50%, #000000 100%);
+    background-image: radial-gradient(ellipse at top, #1a1a1a 0%, #000000 50%, #000000 100%);
     min-height: 100vh;
   }
 
@@ -46,20 +46,46 @@
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    background-image: linear-gradient(to right, white, #e5e7eb, #9ca3af);
+    background-image: linear-gradient(to right, #ffffff, #a1a1aa, #71717a);
+  }
+  
+  .text-gradient-subtle {
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-image: linear-gradient(to right, #e4e4e7, #a1a1aa);
   }
   
   .glass {
-    background-color: rgba(255, 255, 255, 0.05);
+    background-color: rgba(255, 255, 255, 0.03);
     backdrop-filter: blur(24px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  
+  .glass-strong {
+    background-color: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
   }
   
   .glow {
-    box-shadow: 0 0 40px -10px rgba(255, 255, 255, 0.3);
+    box-shadow: 0 0 40px -10px rgba(255, 255, 255, 0.15);
   }
   
-  .metric-glow {
-    box-shadow: 0 0 60px -15px rgba(59, 130, 246, 0.5);
+  .glow-strong {
+    box-shadow: 0 0 60px -15px rgba(255, 255, 255, 0.25);
+  }
+  
+  /* Новые монохромные градиенты */
+  .bg-gradient-mono {
+    background-image: linear-gradient(to bottom right, #27272a, #18181b);
+  }
+  
+  .bg-gradient-mono-light {
+    background-image: linear-gradient(to bottom right, #3f3f46, #27272a);
+  }
+  
+  .bg-gradient-shine {
+    background-image: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.02) 100%);
   }
 }

@@ -69,8 +69,8 @@ export function UploadForm() {
             {!preview ? (
                 <div
                     className={`relative border-2 border-dashed rounded-3xl p-12 text-center transition-all duration-300 ${dragActive
-                        ? "border-blue-500 bg-blue-500/10"
-                        : "border-gray-700 bg-white/5 hover:border-gray-500"
+                            ? "border-white bg-white/10"
+                            : "border-gray-700 bg-white/5 hover:border-gray-500"
                         }`}
                     onDragEnter={handleDrag}
                     onDragLeave={handleDrag}

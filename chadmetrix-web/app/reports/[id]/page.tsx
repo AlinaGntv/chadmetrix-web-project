@@ -31,15 +31,15 @@ export default function ReportDetailPage() {
     const totalScore = (metrics.reduce((acc, m) => acc + m.score, 0) / metrics.length).toFixed(1);
 
     const getScoreColor = (score: number) => {
-        if (score >= 8) return "from-green-500 to-emerald-500";
-        if (score >= 6) return "from-yellow-500 to-orange-500";
-        return "from-red-500 to-pink-500";
+        if (score >= 8) return "from-gray-300 to-white";
+        if (score >= 6) return "from-gray-500 to-gray-300";
+        return "from-gray-700 to-gray-500";
     };
 
     const getScoreTextColor = (score: number) => {
-        if (score >= 8) return "text-green-400";
-        if (score >= 6) return "text-yellow-400";
-        return "text-red-400";
+        if (score >= 8) return "text-white";
+        if (score >= 6) return "text-gray-300";
+        return "text-gray-500";
     };
 
     return (

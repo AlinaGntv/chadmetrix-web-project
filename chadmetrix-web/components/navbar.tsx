@@ -74,7 +74,7 @@ export function Navbar() {
                         <Link href="/reports" className="block px-3 py-2 text-base text-gray-300 hover:text-white">
                             Отчёты
                         </Link>
-                        <Link href="/login" className="block px-3 py-2 text-base text-blue-400">
+                        <Link href="/login" className="block px-3 py-2 text-base text-white font-medium">
                             Войти
                         </Link>
                     </div>

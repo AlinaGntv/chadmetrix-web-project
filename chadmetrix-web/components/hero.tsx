@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 export function Hero() {
     return (
         <section className="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden">
-            <div className="absolute inset-0 bg-linear-to-b from-blue-500/10 via-transparent to-transparent pointer-events-none" />
+            <div className="absolute inset-0 bg-linear-to-b from-white/5 via-transparent to-transparent pointer-events-none" />
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
                 <div className="text-center max-w-4xl mx-auto">
@@ -19,7 +19,7 @@ export function Hero() {
 
                     <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-6 text-gradient leading-tight">
                         Узнай свою <br />
-                        <span className="text-transparent bg-clip-text bg-linear-to-r from-blue-400 to-purple-600">
+                        <span className="text-transparent bg-clip-text bg-linear-to-r from-white via-gray-400 to-gray-600">
                             объективную оценку
                         </span>
                     </h1>

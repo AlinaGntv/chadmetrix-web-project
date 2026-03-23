@@ -34,7 +34,7 @@ export default function DashboardPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
                     <div className="glass rounded-2xl p-6 border border-white/10">
                         <div className="flex items-center justify-between mb-4">
-                            <FileText className="w-8 h-8 text-blue-400" />
+                            <FileText className="w-8 h-8 text-gray-400" />
                             <span className="text-2xl font-bold text-white">12</span>
                         </div>
                         <p className="text-gray-400">Всего анализов</p>
@@ -50,7 +50,7 @@ export default function DashboardPage() {
 
                     <div className="glass rounded-2xl p-6 border border-white/10">
                         <div className="flex items-center justify-between mb-4">
-                            <User className="w-8 h-8 text-purple-400" />
+                            <User className="w-8 h-8 text-gray-400" />
                             <span className="text-2xl font-bold text-white">Pro</span>
                         </div>
                         <p className="text-gray-400">Текущий тариф</p>
@@ -60,7 +60,7 @@ export default function DashboardPage() {
                 <div className="mb-8">
                     <div className="flex items-center justify-between mb-6">
                         <h2 className="text-xl font-semibold text-white">Последние отчёты</h2>
-                        <Link href="/reports" className="text-blue-400 hover:text-blue-300 text-sm">
+                        <Link href="/reports" className="text-gray-400 hover:text-white text-sm">
                             Смотреть все →
                         </Link>
                     </div>

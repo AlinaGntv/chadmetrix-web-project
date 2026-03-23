@@ -35,7 +35,7 @@ export function FAQ() {
             <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="text-center mb-16">
                     <div className="inline-flex items-center space-x-2 glass rounded-full px-4 py-1.5 mb-4">
-                        <HelpCircle className="w-4 h-4 text-blue-400" />
+                        <HelpCircle className="w-4 h-4 text-gray-400" />
                         <span className="text-sm text-gray-300">Вопросы и ответы</span>
                     </div>
                     <h2 className="text-3xl md:text-5xl font-bold text-gradient">
