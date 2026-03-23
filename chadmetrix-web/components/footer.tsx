@@ -10,7 +10,7 @@ export function Footer() {
                     <div className="col-span-1 md:col-span-2">
                         <Link href="/" className="flex items-center space-x-2 mb-4">
                             <Sparkles className="w-6 h-6 text-white" />
-                            <span className="text-xl font-bold">ChadMetrix</span>
+                            <span className="text-xl font-bold">chadmetrix</span>
                         </Link>
                         <p className="text-gray-400 text-sm max-w-xs">
                             Профессиональный ИИ-анализ внешности по 17 метрикам качества.
@@ -45,7 +45,7 @@ export function Footer() {
                 </div>
 
                 <div className="mt-8 pt-8 border-t border-white/10 text-center text-sm text-gray-500">
-                    © 2024 ChadMetrix. Все права защищены.
+                    © 2026 chadmetrix
                 </div>
             </div>
         </footer>

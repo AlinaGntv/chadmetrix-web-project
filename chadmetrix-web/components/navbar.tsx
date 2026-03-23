@@ -3,23 +3,31 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Menu, X, User, Sparkles } from "lucide-react";
+import { Menu, X, User } from "lucide-react";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 
 export function Navbar() {
     const [isOpen, setIsOpen] = useState(false);
-    const [isLoggedIn] = useState(false); // Заглушка для авторизации
+    const [isLoggedIn] = useState(false);
 
     return (
         <nav className="fixed top-0 w-full z-50 glass border-b border-white/10">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex justify-between items-center h-16">
-                    <Link href="/" className="flex items-center space-x-2 group">
-                        <div className="w-8 h-8 rounded-lg bg-linear-to-br from-white to-gray-600 flex items-center justify-center">
-                            <Sparkles className="w-5 h-5 text-black" />
+                    <Link href="/" className="flex items-center space-x-3 group">
+                        <div className="relative w-8 h-8 rounded-lg overflow-hidden">
+                            <Image
+                                src="/logo.png"
+                                alt="ChadMetrix"
+                                fill
+                                className="object-cover"
+                                priority
+                            />
                         </div>
-                        <span className="text-xl font-bold tracking-tight text-gradient">
-                            ChadMetrix
+                        <span className="text-xl font-bold tracking-tight">
+                            <span className="text-white group-hover:text-gray-300 transition-colors">Chad</span>
+                            <span className="text-gray-500 group-hover:text-gray-400 transition-colors">Metrix</span>
                         </span>
                     </Link>
 
