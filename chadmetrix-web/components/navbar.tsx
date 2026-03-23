@@ -19,7 +19,7 @@ export function Navbar() {
                         {/* Логотип с рамкой и свечением */}
                         <div className="relative w-9 h-9 rounded-full overflow-hidden ring-2 ring-white/20 group-hover:ring-white/40 transition-all shadow-[0_0_15px_rgba(255,255,255,0.3)]">
                             <Image
-                                src="/logo.png"
+                                src="/logo1.png"
                                 alt="ChadMetrix"
                                 fill
                                 className="object-cover"
