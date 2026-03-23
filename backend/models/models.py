@@ -181,6 +181,9 @@ class User(Base):
     reports = relationship("Report", back_populates="user", cascade="all, delete-orphan")
     analyses = relationship("Analysis", back_populates="user", cascade="all, delete-orphan")
 
+    metrics = relationship("Metric", back_populates="user", cascade="all, delete-orphan")
+    reviews = relationship("Review", back_populates="user", cascade="all, delete-orphan")
+
 # Добавляем обратные связи после определения User
 Payment.user = relationship("User", back_populates="payments")
 Photo.user = relationship("User", back_populates="photos")
