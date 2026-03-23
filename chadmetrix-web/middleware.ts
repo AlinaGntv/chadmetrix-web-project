@@ -2,22 +2,37 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
-    const token = request.cookies.get('token'); // Было 'access_token', стало 'token'
+    const token = request.cookies.get('token');
     const pathname = request.nextUrl.pathname;
 
-    const isAuthPage = pathname === '/login' || pathname.startsWith('/auth/');
+    // Публичные маршруты
+    const isPublicPage =
+        pathname === '/' ||
+        pathname === '/login' ||
+        pathname.startsWith('/auth/') ||
+        pathname.startsWith('/_next') ||
+        pathname.includes('.'); // статические файлы
+
+    // Защищенные маршруты
     const isProtectedPage =
         pathname.startsWith('/dashboard') ||
         pathname.startsWith('/analysis') ||
         pathname.startsWith('/reports');
 
-    // Если нет токена и пытаемся зайти на защищенную страницу
+    // Если пользователь не авторизован и пытается зайти на защищенную страницу
     if (!token && isProtectedPage) {
-        return NextResponse.redirect(new URL('/login', request.url));
+        const loginUrl = new URL('/login', request.url);
+        loginUrl.searchParams.set('from', pathname);
+        return NextResponse.redirect(loginUrl);
     }
 
-    // Если есть токен и пытаемся зайти на страницу логина
-    if (token && isAuthPage) {
+    // Если пользователь авторизован и пытается зайти на страницу логина
+    if (token && pathname === '/login') {
+        return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+
+    // Если пользователь авторизован и пытается зайти на /auth/callback
+    if (token && pathname.startsWith('/auth/')) {
         return NextResponse.redirect(new URL('/dashboard', request.url));
     }
 

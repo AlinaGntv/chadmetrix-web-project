@@ -1,8 +1,7 @@
 // app/auth/callback/page.tsx
 "use client";
 
-import { Suspense } from "react";
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
@@ -14,12 +13,15 @@ function CallbackContent() {
         const token = searchParams.get("token");
 
         if (token) {
-            // Сохраняем токен в cookie
-            document.cookie = `token=${token}; path=/; max-age=2592000; secure; samesite=strict`;
-            // Редирект на дашборд
-            router.push("/dashboard");
+            // Устанавливаем cookie с правильными параметрами
+            // Убираем secure для разработки, добавляем SameSite=Lax
+            document.cookie = `token=${token}; path=/; max-age=2592000; SameSite=Lax; ${window.location.protocol === 'https:' ? 'secure;' : ''}`;
+
+            // Небольшая задержка для установки cookie
+            setTimeout(() => {
+                router.push("/dashboard");
+            }, 100);
         } else {
-            // Если нет токена - ошибка
             router.push("/login?error=auth_failed");
         }
     }, [router, searchParams]);
