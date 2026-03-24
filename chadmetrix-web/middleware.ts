@@ -1,44 +1,44 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
 export function middleware(request: NextRequest) {
-    const token = request.cookies.get('token');
-    const pathname = request.nextUrl.pathname;
+    const token = request.cookies.get("token");
+    const { pathname } = request.nextUrl;
 
-    // Публичные маршруты
-    const isPublicPage =
-        pathname === '/' ||
-        pathname === '/login' ||
-        pathname.startsWith('/auth/') ||
-        pathname.startsWith('/_next') ||
-        pathname.includes('.'); // статические файлы
+    // Публичные страницы
+    const publicPaths = [
+        "/",
+        "/login",
+    ];
 
-    // Защищенные маршруты
-    const isProtectedPage =
-        pathname.startsWith('/dashboard') ||
-        pathname.startsWith('/analysis') ||
-        pathname.startsWith('/reports');
+    const isPublic =
+        publicPaths.includes(pathname) ||
+        pathname.startsWith("/auth") ||
+        pathname.startsWith("/api") ||
+        pathname.startsWith("/_next") ||
+        pathname.startsWith("/favicon") ||
+        pathname.includes(".");
 
-    // Если пользователь не авторизован и пытается зайти на защищенную страницу
-    if (!token && isProtectedPage) {
-        const loginUrl = new URL('/login', request.url);
-        loginUrl.searchParams.set('from', pathname);
-        return NextResponse.redirect(loginUrl);
+    const isProtected =
+        pathname.startsWith("/dashboard") ||
+        pathname.startsWith("/analysis") ||
+        pathname.startsWith("/reports");
+
+    // ❌ не авторизован → защищённая страница
+    if (!token && isProtected) {
+        const url = new URL("/login", request.url);
+        url.searchParams.set("from", pathname);
+        return NextResponse.redirect(url);
     }
 
-    // Если пользователь авторизован и пытается зайти на страницу логина
-    if (token && pathname === '/login') {
-        return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
-
-    // Если пользователь авторизован и пытается зайти на /auth/callback
-    if (token && pathname.startsWith('/auth/')) {
-        return NextResponse.redirect(new URL('/dashboard', request.url));
+    // ✅ авторизован → не должен идти на login
+    if (token && pathname === "/login") {
+        return NextResponse.redirect(new URL("/dashboard", request.url));
     }
 
     return NextResponse.next();
 }
 
 export const config = {
-    matcher: ['/((?!api|_next/static|_next/image|favicon.ico|logo.png).*)'],
+    matcher: ["/((?!_next|favicon.ico|logo.png).*)"],
 };
