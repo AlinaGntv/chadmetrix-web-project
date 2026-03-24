@@ -26,15 +26,18 @@ export function useAuth() {
             const userData = await getCurrentUser();
             setUser(userData);
         } catch {
-            // Убрал 'error' — он не использовался
             setUser(null);
         } finally {
             setIsLoading(false);
         }
     };
 
-    const loginWithGoogle = () => {
-        window.location.href = "/api/auth/login/google";
+    const loginWithGoogle = (refCode?: string) => {
+        // Если есть реферальный код — добавляем его к URL
+        const url = refCode
+            ? `/api/auth/login/google?ref=${encodeURIComponent(refCode)}`
+            : "/api/auth/login/google";
+        window.location.href = url;
     };
 
     const logout = async () => {
@@ -44,7 +47,6 @@ export function useAuth() {
             setUser(null);
             window.location.href = "/";
         } catch {
-            // Убрал 'error' — он не использовался
             console.error("Logout error");
         }
     };

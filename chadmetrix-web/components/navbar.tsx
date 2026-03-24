@@ -6,9 +6,14 @@ import { Menu, X, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useSearchParams } from "next/navigation";
 
 export function Navbar() {
     const [isOpen, setIsOpen] = useState(false);
+
+    // Получаем реферальный код из URL (?ref=xxx)
+    const searchParams = useSearchParams();
+    const refCode = searchParams.get("ref");
 
     const {
         user,
@@ -17,6 +22,11 @@ export function Navbar() {
         loginWithGoogle,
         logout,
     } = useAuth();
+
+    // Обработчик логина с передачей реферального кода
+    const handleLogin = () => {
+        loginWithGoogle(refCode || undefined);
+    };
 
     return (
         <nav className="fixed top-0 w-full z-50 glass border-b border-white/10">
@@ -107,7 +117,7 @@ export function Navbar() {
                                         backdrop-blur
                                         text-sm
                                         text-white
-                                        max-w-[160px]
+                                        max-w-40
                                         truncate
                                     "
                                 >
@@ -137,7 +147,7 @@ export function Navbar() {
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={loginWithGoogle}
+                                onClick={handleLogin}  // ← изменено: handleLogin вместо loginWithGoogle
                                 className="glass hover:bg-white/10"
                             >
                                 Войти
@@ -202,7 +212,7 @@ export function Navbar() {
                         {!isAuthenticated && (
 
                             <button
-                                onClick={loginWithGoogle}
+                                onClick={handleLogin}  // ← изменено: handleLogin вместо loginWithGoogle
                                 className="block w-full text-left px-3 py-2 text-base text-white font-medium"
                             >
                                 Войти

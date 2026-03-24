@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { Plus, FileText, TrendingUp, User } from "lucide-react";
+import { Plus, FileText, TrendingUp, User, Gift, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ReportCard } from "@/components/report-card";
 
@@ -21,7 +21,16 @@ export default function DashboardPage() {
                         <h1 className="text-3xl font-bold text-white mb-2">Личный кабинет</h1>
                         <p className="text-gray-400">Управляйте своими анализами и отслеживайте прогресс</p>
                     </div>
-                    <div className="mt-4 md:mt-0 flex space-x-3">
+                    <div className="mt-4 md:mt-0 flex flex-wrap gap-3">
+                        <Link href="/referral">
+                            <Button
+                                variant="outline"
+                                className="border-purple-500/30 text-purple-300 hover:bg-purple-500/10 hover:text-purple-200"
+                            >
+                                <Gift className="w-4 h-4 mr-2" />
+                                Реферальная программа
+                            </Button>
+                        </Link>
                         <Link href="/analysis/new">
                             <Button className="bg-white text-black hover:bg-gray-200">
                                 <Plus className="w-4 h-4 mr-2" />
@@ -31,7 +40,7 @@ export default function DashboardPage() {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
                     <div className="glass rounded-2xl p-6 border border-white/10">
                         <div className="flex items-center justify-between mb-4">
                             <FileText className="w-8 h-8 text-gray-400" />
@@ -55,6 +64,21 @@ export default function DashboardPage() {
                         </div>
                         <p className="text-gray-400">Текущий тариф</p>
                     </div>
+
+                    {/* === НОВОЕ: Карточка рефералов === */}
+                    <Link href="/referral" className="group">
+                        <div className="glass rounded-2xl p-6 border border-purple-500/20 bg-linear-to-br from-purple-500/5 to-blue-500/5 hover:border-purple-500/40 transition-all cursor-pointer">
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-2">
+                                    <Users className="w-8 h-8 text-purple-400" />
+                                    <Gift className="w-5 h-5 text-purple-300" />
+                                </div>
+                                <span className="text-2xl font-bold text-white group-hover:text-purple-300 transition-colors">→</span>
+                            </div>
+                            <p className="text-gray-400 group-hover:text-gray-300">Реферальная программа</p>
+                            <p className="text-xs text-purple-400/70 mt-1">Пригласи друга — получи бонус</p>
+                        </div>
+                    </Link>
                 </div>
 
                 <div className="mb-8">

@@ -19,7 +19,8 @@ api.interceptors.response.use(
                 const protectedPaths =
                     path.startsWith("/dashboard") ||
                     path.startsWith("/analysis") ||
-                    path.startsWith("/reports");
+                    path.startsWith("/reports") ||
+                    path.startsWith("/referral");
 
                 if (protectedPaths) {
                     window.location.href = "/login";
@@ -33,6 +34,12 @@ api.interceptors.response.use(
 
 export async function getCurrentUser() {
     const response = await api.get("/auth/me")
+    return response.data
+}
+
+// === НОВОЕ: Реферальная статистика ===
+export async function getReferralStats() {
+    const response = await api.get("/referrals/stats")
     return response.data
 }
 
