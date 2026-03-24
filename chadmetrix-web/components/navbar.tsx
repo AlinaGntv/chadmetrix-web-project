@@ -1,32 +1,58 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { Menu, X, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useSearchParams } from "next/navigation";
 
-export function Navbar() {
-    const [isOpen, setIsOpen] = useState(false);
-
-    // Получаем реферальный код из URL (?ref=xxx)
+// Отдельный компонент для кнопки логина с реферальным кодом
+function LoginButton() {
     const searchParams = useSearchParams();
     const refCode = searchParams.get("ref");
+    const { loginWithGoogle } = useAuth();
+
+    const handleLogin = () => {
+        loginWithGoogle(refCode || undefined);
+    };
+
+    return (
+        <Button
+            variant="outline"
+            size="sm"
+            onClick={handleLogin}
+            className="glass hover:bg-white/10"
+        >
+            Войти
+        </Button>
+    );
+}
+
+// Fallback для Suspense
+function LoginButtonFallback() {
+    return (
+        <Button
+            variant="outline"
+            size="sm"
+            disabled
+            className="glass hover:bg-white/10"
+        >
+            Войти
+        </Button>
+    );
+}
+
+export function Navbar() {
+    const [isOpen, setIsOpen] = useState(false);
 
     const {
         user,
         isLoading,
         isAuthenticated,
-        loginWithGoogle,
         logout,
     } = useAuth();
-
-    // Обработчик логина с передачей реферального кода
-    const handleLogin = () => {
-        loginWithGoogle(refCode || undefined);
-    };
 
     return (
         <nav className="fixed top-0 w-full z-50 glass border-b border-white/10">
@@ -144,14 +170,9 @@ export function Navbar() {
 
                         ) : (
 
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={handleLogin}  // ← изменено: handleLogin вместо loginWithGoogle
-                                className="glass hover:bg-white/10"
-                            >
-                                Войти
-                            </Button>
+                            <Suspense fallback={<LoginButtonFallback />}>
+                                <LoginButton />
+                            </Suspense>
 
                         )}
 
@@ -211,12 +232,13 @@ export function Navbar() {
 
                         {!isAuthenticated && (
 
-                            <button
-                                onClick={handleLogin}  // ← изменено: handleLogin вместо loginWithGoogle
-                                className="block w-full text-left px-3 py-2 text-base text-white font-medium"
-                            >
-                                Войти
-                            </button>
+                            <Suspense fallback={
+                                <button className="block w-full text-left px-3 py-2 text-base text-white/50 font-medium" disabled>
+                                    Войти
+                                </button>
+                            }>
+                                <MobileLoginButton />
+                            </Suspense>
 
                         )}
 
@@ -227,5 +249,25 @@ export function Navbar() {
             )}
 
         </nav>
+    );
+}
+
+// Мобильная версия кнопки логина
+function MobileLoginButton() {
+    const searchParams = useSearchParams();
+    const refCode = searchParams.get("ref");
+    const { loginWithGoogle } = useAuth();
+
+    const handleLogin = () => {
+        loginWithGoogle(refCode || undefined);
+    };
+
+    return (
+        <button
+            onClick={handleLogin}
+            className="block w-full text-left px-3 py-2 text-base text-white font-medium"
+        >
+            Войти
+        </button>
     );
 }
