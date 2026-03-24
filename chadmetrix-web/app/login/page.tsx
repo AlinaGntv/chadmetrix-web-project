@@ -32,7 +32,7 @@ export default function LoginPage() {
 
                     <p className="text-center text-sm text-gray-500">
                         Продолжая, вы соглашаетесь с{" "}
-                        <Link href="#" className="text-blue-400 hover:text-blue-300">
+                        <Link href="/terms" className="text-blue-400 hover:text-blue-300">
                             Условиями использования
                         </Link>
                     </p>
