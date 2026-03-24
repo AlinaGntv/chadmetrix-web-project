@@ -13,13 +13,23 @@ api.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response?.status === 401) {
-            if (window.location.pathname !== "/login") {
-                window.location.href = "/login";
+            if (typeof window !== "undefined") {
+                const path = window.location.pathname;
+
+                const protectedPaths =
+                    path.startsWith("/dashboard") ||
+                    path.startsWith("/analysis") ||
+                    path.startsWith("/reports");
+
+                if (protectedPaths) {
+                    window.location.href = "/login";
+                }
             }
         }
-        return Promise.reject(error)
+
+        return Promise.reject(error);
     }
-)
+);
 
 export async function getCurrentUser() {
     const response = await api.get("/auth/me")
