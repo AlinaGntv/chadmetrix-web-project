@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import engine
 from models.models import Base
 import auth
+import analysis
 
 # Создаем таблицы
 Base.metadata.create_all(bind=engine)
@@ -25,6 +26,7 @@ app.add_middleware(
 
 # Подключаем роутеры
 app.include_router(auth.router)
+app.include_router(analysis.router)
 
 @app.get("/")
 def root():

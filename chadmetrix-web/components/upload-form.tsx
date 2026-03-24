@@ -1,149 +1,204 @@
-// components/upload-form.tsx
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Upload, X, ImageIcon, Loader2 } from "lucide-react";
+import { Upload, X, Loader2, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 export function UploadForm() {
-    const [dragActive, setDragActive] = useState(false);
-    const [preview, setPreview] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(false);
     const router = useRouter();
+    const { user } = useAuth();
 
-    // Сначала объявляем handleFile
-    const handleFile = useCallback((file: File) => {
-        if (file.type.startsWith("image/")) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setPreview(reader.result as string);
-            };
-            reader.readAsDataURL(file);
-        }
-    }, []);
+    const [front, setFront] = useState<File | null>(null);
+    const [side, setSide] = useState<File | null>(null);
 
-    // Потом handleDrop, который использует handleFile
-    const handleDrop = useCallback((e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setDragActive(false);
+    const [frontPreview, setFrontPreview] = useState<string | null>(null);
+    const [sidePreview, setSidePreview] = useState<string | null>(null);
 
-        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-            handleFile(e.dataTransfer.files[0]);
-        }
-    }, [handleFile]);
+    const [isLoading, setIsLoading] = useState(false);
 
-    const handleDrag = useCallback((e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (e.type === "dragenter" || e.type === "dragover") {
-            setDragActive(true);
-        } else if (e.type === "dragleave") {
-            setDragActive(false);
-        }
-    }, []);
+    const canUseTwoPhotos =
+        user?.tariff_type === "HTN" ||
+        user?.tariff_type === "CHAD";
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        e.preventDefault();
-        if (e.target.files && e.target.files[0]) {
-            handleFile(e.target.files[0]);
-        }
+    const readFile = (file: File, type: "front" | "side") => {
+        const reader = new FileReader();
+
+        reader.onloadend = () => {
+            if (type === "front") {
+                setFront(file);
+                setFrontPreview(reader.result as string);
+            } else {
+                setSide(file);
+                setSidePreview(reader.result as string);
+            }
+        };
+
+        reader.readAsDataURL(file);
     };
+
+    const handleChange =
+        (type: "front" | "side") =>
+            (e: React.ChangeEvent<HTMLInputElement>) => {
+                if (!e.target.files?.[0]) return;
+                readFile(e.target.files[0], type);
+            };
 
     const handleSubmit = async () => {
-        if (!preview) return;
+        if (!front) return;
+
         setIsLoading(true);
-        // Имитация загрузки на сервер
-        setTimeout(() => {
+
+        try {
+            const formData = new FormData();
+
+            formData.append("photo_front", front);
+
+            if (side && canUseTwoPhotos) {
+                formData.append("photo_side", side);
+            }
+
+            const res = await fetch("/api/analysis", {
+                method: "POST",
+                body: formData,
+                credentials: "include",
+            });
+
+            if (!res.ok) {
+                throw new Error("Upload failed");
+            }
+
+            const data = await res.json();
+
+            router.push(`/reports/${data.analysis_id}`);
+
+        } catch (e) {
+            console.error(e);
+            alert("Ошибка загрузки");
+        } finally {
             setIsLoading(false);
-            router.push("/reports/123");
-        }, 2000);
+        }
     };
 
-    const clearPreview = () => setPreview(null);
+    const clear = (type: "front" | "side") => {
+        if (type === "front") {
+            setFront(null);
+            setFrontPreview(null);
+        } else {
+            setSide(null);
+            setSidePreview(null);
+        }
+    };
 
     return (
-        <div className="w-full max-w-2xl mx-auto">
-            {!preview ? (
-                <div
-                    className={`relative border-2 border-dashed rounded-3xl p-12 text-center transition-all duration-300 ${dragActive
-                            ? "border-white bg-white/10"
-                            : "border-gray-700 bg-white/5 hover:border-gray-500"
-                        }`}
-                    onDragEnter={handleDrag}
-                    onDragLeave={handleDrag}
-                    onDragOver={handleDrag}
-                    onDrop={handleDrop}
+        <div className="space-y-6">
+
+            {/* FRONT */}
+
+            <PhotoSlot
+                title="Фото анфас"
+                preview={frontPreview}
+                onChange={handleChange("front")}
+                onClear={() => clear("front")}
+            />
+
+            {/* SIDE */}
+
+            <PhotoSlot
+                title="Фото профиль"
+                preview={sidePreview}
+                onChange={handleChange("side")}
+                onClear={() => clear("side")}
+                locked={!canUseTwoPhotos}
+            />
+
+            <div className="flex justify-center">
+
+                <Button
+                    onClick={handleSubmit}
+                    disabled={!front || isLoading}
+                    className="bg-white text-black hover:bg-gray-200"
                 >
+                    {isLoading ? (
+                        <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Анализируем...
+                        </>
+                    ) : (
+                        "Начать анализ"
+                    )}
+                </Button>
+
+            </div>
+
+        </div>
+    );
+}
+
+interface PhotoSlotProps {
+    title: string
+    preview: string | null
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+    onClear: () => void
+    locked?: boolean
+}
+
+function PhotoSlot({
+    title,
+    preview,
+    onChange,
+    onClear,
+    locked = false,
+}: PhotoSlotProps) {
+    return (
+        <div className="glass rounded-2xl p-6 border border-white/10">
+
+            <h3 className="text-white mb-3">{title}</h3>
+
+            {locked && (
+                <div className="text-xs text-gray-400 mb-2 flex items-center gap-2">
+                    <Lock className="w-4 h-4" />
+                    Доступно в подписке
+                </div>
+            )}
+
+            {!preview ? (
+                <div className="relative border border-dashed border-gray-600 rounded-xl p-8 text-center">
+
                     <input
                         type="file"
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        onChange={handleChange}
                         accept="image/*"
+                        onChange={onChange}
+                        disabled={locked}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
                     />
 
-                    <div className="flex flex-col items-center">
-                        <div className="w-20 h-20 rounded-2xl bg-linear-to-br from-gray-800 to-gray-900 flex items-center justify-center mb-6">
-                            <Upload className="w-10 h-10 text-gray-400" />
-                        </div>
+                    <Upload className="mx-auto mb-2 text-gray-400" />
 
-                        <h3 className="text-xl font-semibold mb-2 text-white">
-                            Загрузите фото лица
-                        </h3>
-                        <p className="text-gray-400 mb-6 max-w-sm">
-                            Перетащите изображение сюда или нажмите для выбора.
-                            Поддерживаются JPG, PNG до 10MB.
-                        </p>
+                    <p className="text-gray-400 text-sm">
+                        Нажмите или перетащите фото
+                    </p>
 
-                        <div className="flex items-center space-x-2 text-sm text-gray-500">
-                            <ImageIcon className="w-4 h-4" />
-                            <span>Рекомендуемое разрешение: 1024×1024</span>
-                        </div>
-                    </div>
                 </div>
             ) : (
-                <div className="glass rounded-3xl p-8 border border-white/10">
-                    <div className="relative aspect-square max-w-md mx-auto rounded-2xl overflow-hidden mb-6">
-                        <Image
-                            src={preview}
-                            alt="Preview"
-                            fill
-                            className="object-cover"
-                            sizes="(max-width: 768px) 100vw, 448px"
-                        />
-                        <button
-                            onClick={clearPreview}
-                            className="absolute top-4 right-4 p-2 bg-black/50 backdrop-blur-md rounded-full hover:bg-black/70 transition-colors"
-                        >
-                            <X className="w-5 h-5" />
-                        </button>
-                    </div>
+                <div className="relative aspect-square max-w-sm rounded-xl overflow-hidden">
 
-                    <div className="flex justify-center space-x-4">
-                        <Button
-                            variant="outline"
-                            onClick={clearPreview}
-                            className="glass border-white/20"
-                        >
-                            Изменить фото
-                        </Button>
-                        <Button
-                            onClick={handleSubmit}
-                            disabled={isLoading}
-                            className="bg-white text-black hover:bg-gray-200"
-                        >
-                            {isLoading ? (
-                                <>
-                                    <Loader2 className="mr-2 w-4 h-4 animate-spin" />
-                                    Анализируем...
-                                </>
-                            ) : (
-                                "Начать анализ"
-                            )}
-                        </Button>
-                    </div>
+                    <Image
+                        src={preview}
+                        alt="preview"
+                        fill
+                        className="object-cover"
+                    />
+
+                    <button
+                        onClick={onClear}
+                        className="absolute top-2 right-2 bg-black/50 p-2 rounded-full"
+                    >
+                        <X className="w-4 h-4" />
+                    </button>
+
                 </div>
             )}
         </div>
