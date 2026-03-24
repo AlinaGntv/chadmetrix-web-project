@@ -35,10 +35,12 @@ export function Hero() {
                                 <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
                             </Button>
                         </Link>
-                        <Button variant="outline" size="lg" className="glass px-8 py-6 text-lg border-white/20 hover:bg-white/10">
-                            <Play className="mr-2 w-5 h-5" />
-                            Смотреть пример отчёта
-                        </Button>
+                        <Link href="/demo">
+                            <Button variant="outline" size="lg" className="glass px-8 py-6 text-lg border-white/20 hover:bg-white/10">
+                                <Play className="mr-2 w-5 h-5" />
+                                Смотреть пример отчёта
+                            </Button>
+                        </Link>
                     </div>
 
                     <div className="mt-16 flex items-center justify-center space-x-8 text-gray-500">
