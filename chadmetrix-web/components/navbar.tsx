@@ -111,7 +111,11 @@ export function Navbar() {
                                         truncate
                                     "
                                 >
-                                    {user?.full_name || user?.email || "User"}
+                                    {user?.full_name
+                                        ? user.full_name
+                                        : user?.email
+                                            ? user.email.split("@")[0]
+                                            : "User"}
                                 </div>
 
                                 {/* LOGOUT */}
