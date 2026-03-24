@@ -1,7 +1,12 @@
+// components/pricing.tsx
 "use client";
 
-import { Check, Gift } from "lucide-react";
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Check, Gift, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 const plans = [
     {
@@ -18,8 +23,9 @@ const plans = [
             "20% скидка за отзыв"
         ],
         cta: "Купить за 199₽",
+        href: "/analysis/new",
         popular: false,
-        bonus: null
+        requiresAuth: true,
     },
     {
         name: "Подписка HTN",
@@ -36,8 +42,9 @@ const plans = [
             "Приоритетная обработка"
         ],
         cta: "Оформить подписку",
+        href: "/dashboard?subscribe=htn", // или страница оплаты
         popular: true,
-        bonus: "Выгода 149₽"
+        requiresAuth: true,
     },
     {
         name: "Подписка CHAD",
@@ -54,12 +61,26 @@ const plans = [
             "Поддержка 24/7"
         ],
         cta: "Стать CHAD",
+        href: "/dashboard?subscribe=chad",
         popular: false,
-        bonus: "Лучший выбор"
+        requiresAuth: true,
     },
 ];
 
 export function Pricing() {
+    const { isAuthenticated, isLoading } = useAuth();
+    const router = useRouter();
+    const [showAuthModal, setShowAuthModal] = useState(false);
+
+    const handlePurchase = (plan: typeof plans[0]) => {
+        if (plan.requiresAuth && !isAuthenticated) {
+            setShowAuthModal(true);
+            return;
+        }
+        // Если авторизован — переход по ссылке
+        router.push(plan.href);
+    };
+
     return (
         <section className="py-24 relative">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -78,22 +99,14 @@ export function Pricing() {
                         <div
                             key={plan.name}
                             className={`relative rounded-2xl p-8 ${plan.popular
-                                    ? "glass-strong border border-white/20 scale-105 z-10"
-                                    : "glass border border-white/10"
+                                ? "glass-strong border border-white/20 scale-105 z-10"
+                                : "glass border border-white/10"
                                 }`}
                         >
                             {plan.popular && (
                                 <div className="absolute -top-4 left-1/2 -translate-x-1/2">
                                     <span className="bg-white text-black px-4 py-1 rounded-full text-sm font-bold">
                                         Популярный
-                                    </span>
-                                </div>
-                            )}
-
-                            {plan.bonus && !plan.popular && (
-                                <div className="absolute -top-4 right-4">
-                                    <span className="glass px-3 py-1 rounded-full text-xs text-gray-300 border border-white/10">
-                                        {plan.bonus}
                                     </span>
                                 </div>
                             )}
@@ -118,16 +131,46 @@ export function Pricing() {
                             </ul>
 
                             <Button
+                                onClick={() => handlePurchase(plan)}
                                 className={`w-full ${plan.popular
-                                        ? "bg-white text-black hover:bg-gray-200"
-                                        : "glass border-white/20 hover:bg-white/10"
+                                    ? "bg-white text-black hover:bg-gray-200"
+                                    : "glass border-white/20 hover:bg-white/10"
                                     }`}
                             >
-                                {plan.cta}
+                                {isLoading ? "Загрузка..." : plan.cta}
                             </Button>
                         </div>
                     ))}
                 </div>
+
+                {/* Модальное окно для неавторизованных */}
+                {showAuthModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                        <div className="glass rounded-2xl p-8 max-w-md w-full border border-white/10">
+                            <div className="flex items-center gap-3 mb-4">
+                                <Lock className="w-6 h-6 text-gray-400" />
+                                <h3 className="text-xl font-semibold text-white">Требуется авторизация</h3>
+                            </div>
+                            <p className="text-gray-400 mb-6">
+                                Для покупки анализа необходимо войти через Google. Это займёт 10 секунд.
+                            </p>
+                            <div className="flex gap-3">
+                                <Link href="/login" className="flex-1">
+                                    <Button className="w-full bg-white text-black hover:bg-gray-200">
+                                        Войти
+                                    </Button>
+                                </Link>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setShowAuthModal(false)}
+                                    className="flex-1 glass border-white/20"
+                                >
+                                    Отмена
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Реферальный блок */}
                 <div className="mt-12 glass rounded-2xl p-8 border border-white/10 max-w-3xl mx-auto text-center">
@@ -137,9 +180,11 @@ export function Pricing() {
                         Отправь реферальную ссылку. Когда друг оплатит первый анализ,
                         ты получишь +1 бесплатный анализ на свой баланс.
                     </p>
-                    <Button variant="outline" className="glass border-white/20">
-                        Получить реферальную ссылку
-                    </Button>
+                    <Link href={isAuthenticated ? "/dashboard?tab=referral" : "/login"}>
+                        <Button variant="outline" className="glass border-white/20">
+                            {isAuthenticated ? "Получить реферальную ссылку" : "Войти для получения ссылки"}
+                        </Button>
+                    </Link>
                 </div>
             </div>
         </section>
