@@ -66,3 +66,8 @@ export async function logout() {
     const response = await api.post("/auth/logout")
     return response.data
 }
+
+export async function createPayment(tariffSlug: string) {
+    const response = await api.post(`/payments/create?tariff_slug=${tariffSlug}`);
+    return response.data;
+}

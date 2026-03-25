@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from database import engine, get_db
 from models.models import Base, Referral, User, Payment
-from auth import get_current_user  # Импортируем из auth.py
+from auth import get_current_user
 
 # Создаем таблицы
 Base.metadata.create_all(bind=engine)
@@ -27,9 +27,11 @@ app.add_middleware(
 # Подключаем роутеры
 from auth import router as auth_router
 from analysis import router as analysis_router
+from payments import router as payments_router
 
 app.include_router(auth_router)
 app.include_router(analysis_router)
+app.include_router(payments_router)
 
 # === РЕФЕРАЛЬНЫЕ ЭНДПОИНТЫ ===
 
@@ -41,7 +43,6 @@ def get_referral_stats(
     """
     Получить статистику рефералов для текущего пользователя
     """
-    # Количество приглашенных (зарегистрировались по реферальной ссылке)
     referrals = db.query(Referral).filter(
         Referral.referrer_id == current_user.id
     ).all()
@@ -49,7 +50,6 @@ def get_referral_stats(
     invited_count = len(referrals)
     invited_user_ids = [r.invited_user_id for r in referrals]
     
-    # Количество тех, кто купил анализ (есть успешный payment)
     purchased_count = 0
     if invited_user_ids:
         purchased_count = db.query(Payment).filter(
@@ -57,7 +57,6 @@ def get_referral_stats(
             Payment.status == "succeeded"
         ).distinct(Payment.user_id).count()
     
-    # Бонусы на счету = количество успешных рефералов
     bonuses = purchased_count
     
     return {

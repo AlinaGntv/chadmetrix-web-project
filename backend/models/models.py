@@ -8,11 +8,9 @@ import uuid
 
 Base = declarative_base()
 
-# Функция для генерации UUID как строки
 def generate_uuid():
     return str(uuid.uuid4())
 
-# СНАЧАЛА определи все классы, на которые будут ссылаться другие
 class Payment(Base):
     __tablename__ = "payments"
 
@@ -22,16 +20,21 @@ class Payment(Base):
     payment_method = Column(Text, nullable=False, server_default="yookassa")
     stars_amount = Column(Integer, nullable=True)
     telegram_stars_payment_id = Column(Text, nullable=True, index=True)
-    status = Column(Text, nullable=False, server_default="pending")
-    yookassa_payment_id = Column(Text, nullable=True, index=True)
+    status = Column(Text, nullable=False, server_default="pending")  # pending, succeeded, canceled, refunded
+    yookassa_payment_id = Column(Text, nullable=True, index=True, unique=True)
     tariff_id = Column(Integer, ForeignKey("tariffs.id"), nullable=True)
-    meta = Column(Text, nullable=True)  # было JSONB, стало Text
+    meta = Column(Text, nullable=True)  # JSON с metadata
+    
+    # === НОВЫЕ ПОЛЯ ДЛЯ ЮKASSA ===
+    payment_method_id = Column(Text, nullable=True)  # ID сохраненной карты (для рекуррентов)
+    payment_type = Column(Text, nullable=True)  # 'onetime' или 'subscription'
+    
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     is_deleted = Column(Boolean, default=False, nullable=False)
     
-    # relationships - пока без обратных ссылок
-    user = relationship("User", foreign_keys=[user_id])
+    user = relationship("User", foreign_keys=[user_id], back_populates="payments")
+    tariff = relationship("Tariff")
 
 class Tariff(Base):
     __tablename__ = "tariffs"
@@ -63,7 +66,7 @@ class Metric(Base):
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     metric_name = Column(Text, nullable=False, index=True)
     metric_value = Column(Numeric, nullable=True)
-    raw_json = Column(Text, nullable=True)  # SQLite не поддерживает JSONB, используем Text
+    raw_json = Column(Text, nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     is_deleted = Column(Boolean, default=False, nullable=False)
@@ -77,7 +80,7 @@ class Report(Base):
     pdf_url = Column(Text, nullable=True)
     overall_score = Column(Numeric, nullable=True)
     potential_score = Column(Numeric, nullable=True)
-    metrics_data = Column(Text, nullable=True)  # SQLite не поддерживает JSONB
+    metrics_data = Column(Text, nullable=True)
     improvement_plan = Column(Text, nullable=True)
     meta = Column(Text, nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
@@ -141,7 +144,7 @@ class Analysis(Base):
     price = Column(Numeric, nullable=True)
     is_repeat = Column(Boolean, default=False, nullable=False)
     
-    photos = Column(Text, nullable=False, default="[]")  # SQLite не поддерживает JSONB
+    photos = Column(Text, nullable=False, default="[]")
     metrics = Column(Text, nullable=True)
     weak_zones = Column(Text, nullable=True)
     
@@ -149,21 +152,18 @@ class Analysis(Base):
     is_deleted = Column(Boolean, default=False, nullable=False)
     base_analysis_id = Column(String, ForeignKey("analyses.id", ondelete="SET NULL"), nullable=True)
 
-# ТЕПЕРЬ определяем User с relationship после всех классов
 class User(Base):
     __tablename__ = "users"
 
     id = Column(String, primary_key=True, default=generate_uuid)
     telegram_id = Column(Integer, unique=True, index=True, nullable=True)
     
-    # Новые поля для веб-аутентификации
     email = Column(String, unique=True, index=True, nullable=True)
     google_id = Column(String, unique=True, index=True, nullable=True)
     full_name = Column(String, nullable=True)
     avatar_url = Column(String, nullable=True)
     
-    # Флаг, откуда пришел пользователь
-    auth_provider = Column(String, nullable=True)  # 'telegram', 'google'
+    auth_provider = Column(String, nullable=True)
     
     tariff_type = Column(Text, nullable=False, default="free")
     tariff_expire = Column(TIMESTAMP(timezone=True), nullable=True)
@@ -180,12 +180,10 @@ class User(Base):
     payments = relationship("Payment", back_populates="user", cascade="all, delete-orphan")
     reports = relationship("Report", back_populates="user", cascade="all, delete-orphan")
     analyses = relationship("Analysis", back_populates="user", cascade="all, delete-orphan")
-
     metrics = relationship("Metric", back_populates="user", cascade="all, delete-orphan")
     reviews = relationship("Review", back_populates="user", cascade="all, delete-orphan")
 
-# Добавляем обратные связи после определения User
-Payment.user = relationship("User", back_populates="payments")
+# Обратные связи
 Photo.user = relationship("User", back_populates="photos")
 Metric.user = relationship("User", back_populates="metrics")
 Report.user = relationship("User", back_populates="reports")

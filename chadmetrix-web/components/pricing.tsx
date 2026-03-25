@@ -3,10 +3,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Check, Gift, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { PricingButton } from "./pricing-button";
 
 const plans = [
     {
@@ -22,8 +22,7 @@ const plans = [
             "Сохранение отчёта в личном кабинете",
             "20% скидка за отзыв"
         ],
-        cta: "Купить за 199₽",
-        href: "/analysis/new",
+        tariff: "analysis" as const,
         popular: false,
         requiresAuth: true,
     },
@@ -41,8 +40,7 @@ const plans = [
             "Push-напоминания (14/30 дней)",
             "Приоритетная обработка"
         ],
-        cta: "Оформить подписку",
-        href: "/dashboard?subscribe=htn", // или страница оплаты
+        tariff: "htn" as const,
         popular: true,
         requiresAuth: true,
     },
@@ -60,26 +58,15 @@ const plans = [
             "Ранний доступ к новым фичам",
             "Поддержка 24/7"
         ],
-        cta: "Стать CHAD",
-        href: "/dashboard?subscribe=chad",
+        tariff: "chad" as const,
         popular: false,
         requiresAuth: true,
     },
 ];
 
 export function Pricing() {
-    const { isAuthenticated, isLoading } = useAuth();
-    const router = useRouter();
+    const { isAuthenticated } = useAuth();
     const [showAuthModal, setShowAuthModal] = useState(false);
-
-    const handlePurchase = (plan: typeof plans[0]) => {
-        if (plan.requiresAuth && !isAuthenticated) {
-            setShowAuthModal(true);
-            return;
-        }
-        // Если авторизован — переход по ссылке
-        router.push(plan.href);
-    };
 
     return (
         <section className="py-24 relative">
@@ -130,15 +117,12 @@ export function Pricing() {
                                 ))}
                             </ul>
 
-                            <Button
-                                onClick={() => handlePurchase(plan)}
-                                className={`w-full ${plan.popular
-                                    ? "bg-white text-black hover:bg-gray-200"
-                                    : "glass border-white/20 hover:bg-white/10"
-                                    }`}
-                            >
-                                {isLoading ? "Загрузка..." : plan.cta}
-                            </Button>
+                            <PricingButton
+                                tariff={plan.tariff}
+                                variant={plan.popular ? "popular" : "outline"}
+                                fullWidth={true}
+                                showAuthModal={() => setShowAuthModal(true)}
+                            />
                         </div>
                     ))}
                 </div>
@@ -180,7 +164,7 @@ export function Pricing() {
                         Отправь реферальную ссылку. Когда друг оплатит первый анализ,
                         ты получишь +1 бесплатный анализ на свой баланс.
                     </p>
-                    <Link href={isAuthenticated ? "/dashboard?tab=referral" : "/login"}>
+                    <Link href={isAuthenticated ? "/referral" : "/login"}>
                         <Button variant="outline" className="glass border-white/20">
                             {isAuthenticated ? "Получить реферальную ссылку" : "Войти для получения ссылки"}
                         </Button>
