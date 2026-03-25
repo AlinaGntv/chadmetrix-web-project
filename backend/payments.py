@@ -285,3 +285,23 @@ def check_payment_status(
         "tariff": payment.tariff.name if payment.tariff else None,
         "created_at": payment.created_at.isoformat() if payment.created_at else None
     }
+
+@router.get("/cards")
+def get_saved_cards(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Получить список сохраненных карт (заглушка для модерации)"""
+    # Пока возвращаем пустой список — реальные карты будут после подключения рекуррентов
+    return []
+
+@router.delete("/cards/{card_id}")
+def delete_card(
+    card_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Удалить сохраненную карту (заглушка для модерации)"""
+    # Пока просто логируем
+    print(f"[CARDS] Delete request for card {card_id} by user {user.id}")
+    return {"status": "ok", "message": "Card deleted"}

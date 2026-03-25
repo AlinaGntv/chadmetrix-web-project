@@ -154,6 +154,13 @@ export function Navbar() {
                                             : "User"}
                                 </div>
 
+                                <Link
+                                    href="/dashboard/subscription"
+                                    className="text-sm text-gray-300 hover:text-white transition-colors"
+                                >
+                                    Подписка
+                                </Link>
+
                                 {/* LOGOUT */}
 
                                 <Button
