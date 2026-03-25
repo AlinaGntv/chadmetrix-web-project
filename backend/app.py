@@ -5,6 +5,12 @@ from sqlalchemy.orm import Session
 from database import engine, get_db
 from models.models import Base, Referral, User, Payment
 from auth import get_current_user
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 # Создаем таблицы
 Base.metadata.create_all(bind=engine)
