@@ -27,30 +27,42 @@ def get_auth_headers():
 
 # ========== ПРИВЯЗКА КАРТЫ (Нулевая сумма) ==========
 
+# backend/payments.py — ключевые изменения
+
+# ========== ПРИВЯЗКА КАРТЫ ==========
 @router.post("/bind-card")
 async def bind_card_init(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    """
+    Привязка карты. В тестовом магазине ЮKassa не принимает 0.00, 
+    используем минимальную сумму 1.00 руб (потом можно вернуть)
+    """
     idempotence_key = str(uuid.uuid4())
     headers = get_auth_headers()
     headers["Idempotence-Key"] = idempotence_key
     
+    # Для тестового магазина: минимум 1.00, для продакшена можно 0.00
+    is_test_shop = "test" in YOOKASSA_SHOP_ID or len(YOOKASSA_SHOP_ID) < 6
+    bind_amount = "1.00" if is_test_shop else "0.00"
+    
     payload = {
         "amount": {
-            "value": "0.00",
+            "value": bind_amount,
             "currency": "RUB"
         },
-        "capture": True,
+        "capture": True,  # Сразу списываем (возврат потом если нужно)
         "confirmation": {
             "type": "redirect",
             "return_url": f"https://chadmetrix.ru/dashboard/subscription?bind=success"
         },
-        "description": f"Привязка карты для автоплатежей (User: {current_user.id})",
+        "description": f"Привязка карты (User: {current_user.id[:8]}...)",
         "save_payment_method": True,
         "metadata": {
             "user_id": current_user.id,
-            "action": "bind_card"
+            "action": "bind_card",
+            "is_test": is_test_shop
         }
     }
     
@@ -69,18 +81,20 @@ async def bind_card_init(
         payment = Payment(
             id=str(uuid.uuid4()),
             user_id=current_user.id,
-            amount=0,
+            amount=1.00 if is_test_shop else 0,  # Сохраняем реальную сумму
             status="pending",
             yookassa_payment_id=data["id"],
             payment_type="bind_card",
-            meta=json.dumps({"action": "bind_card"})
+            meta=json.dumps({"action": "bind_card", "amount": bind_amount})
         )
         db.add(payment)
         db.commit()
         
         return {
             "confirmation_url": data["confirmation"]["confirmation_url"],
-            "payment_id": data["id"]
+            "payment_id": data["id"],
+            "test_mode": is_test_shop,
+            "amount": bind_amount
         }
 
 # ========== РАЗОВАЯ ОПЛАТА (БЕЗ СОХРАНЕНИЯ КАРТЫ) ==========
