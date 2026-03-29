@@ -183,6 +183,10 @@ class User(Base):
     metrics = relationship("Metric", back_populates="user", cascade="all, delete-orphan")
     reviews = relationship("Review", back_populates="user", cascade="all, delete-orphan")
 
+    # Для автоплатежей
+    payment_method_id = Column(String, nullable=True)  # ID сохраненной карты в ЮKassa
+    auto_payment_enabled = Column(Boolean, default=False, nullable=False)
+
 # Обратные связи
 Photo.user = relationship("User", back_populates="photos")
 Metric.user = relationship("User", back_populates="metrics")

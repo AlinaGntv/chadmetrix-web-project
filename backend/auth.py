@@ -298,10 +298,13 @@ async def get_me(current_user: User = Depends(get_current_user)):
         "full_name": current_user.full_name,
         "avatar_url": current_user.avatar_url,
         "tariff_type": current_user.tariff_type,
+        "tariff_expire": current_user.tariff_expire.isoformat() if current_user.tariff_expire else None,
         "photo_uses_remaining": current_user.photo_uses_remaining,
+        # Для автоплатежей
+        "payment_method_id": current_user.payment_method_id,
+        "auto_payment_enabled": current_user.auto_payment_enabled,
         "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
     }
-
 
 @router.post("/logout")
 async def logout(response: Response):

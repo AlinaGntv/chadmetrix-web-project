@@ -10,7 +10,10 @@ interface User {
     full_name: string;
     avatar_url: string;
     tariff_type: string;
+    tariff_expire?: string;           // ← ДОБАВИТЬ
     photo_uses_remaining: number;
+    payment_method_id?: string;       // ← ДОБАВИТЬ (для автоплатежей)
+    auto_payment_enabled?: boolean;   // ← ДОБАВИТЬ (для автоплатежей)
 }
 
 export function useAuth() {
@@ -33,7 +36,6 @@ export function useAuth() {
     };
 
     const loginWithGoogle = (refCode?: string) => {
-        // Если есть реферальный код — добавляем его к URL
         const url = refCode
             ? `/api/auth/login/google?ref=${encodeURIComponent(refCode)}`
             : "/api/auth/login/google";
@@ -42,7 +44,7 @@ export function useAuth() {
 
     const logout = async () => {
         try {
-            await api.post("/auth/logout");
+            await api.post("/api/auth/logout");  // ← ИСПРАВИТЬ: было "/auth/logout"
             document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
             setUser(null);
             window.location.href = "/";
@@ -57,6 +59,6 @@ export function useAuth() {
         isAuthenticated: !!user,
         loginWithGoogle,
         logout,
-        refreshUser: checkAuth
+        refreshUser: checkAuth  // ← Уже есть, отлично
     };
 }
