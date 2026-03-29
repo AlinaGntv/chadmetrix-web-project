@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { api } from "@/lib/api";
+import { AxiosError } from "axios";
 
 interface PricingButtonProps {
     tariff: "analysis" | "htn" | "chad";
@@ -14,19 +15,24 @@ interface PricingButtonProps {
     showAuthModal?: () => void;
 }
 
+// ID тарифов в БД (проверено: 1=Разовый анализ)
+// Добавьте остальные когда создадите в БД!
+const TARIFF_IDS: Record<string, number> = {
+    analysis: 1,  // Разовый анализ - 199₽
+    htn: 2,       // Создайте в БД: INSERT INTO tariffs (id, name, price, reports_count) VALUES (2, 'Подписка HTN', 249, 2);
+    chad: 3       // Создайте в БД: INSERT INTO tariffs (id, name, price, reports_count) VALUES (3, 'Подписка CHAD', 349, 3);
+};
+
 const TARIFF_CONFIG = {
     analysis: {
-        price: 199,
         label: "Купить за 199₽",
         loadingLabel: "Переход к оплате...",
     },
     htn: {
-        price: 249,
         label: "Оформить подписку",
         loadingLabel: "Переход к оплате...",
     },
     chad: {
-        price: 349,
         label: "Стать CHAD",
         loadingLabel: "Переход к оплате...",
     }
@@ -48,15 +54,29 @@ export function PricingButton({
             return;
         }
 
+        const tariffId = TARIFF_IDS[tariff];
+        if (!tariffId) {
+            alert("Тариф не найден в системе");
+            return;
+        }
+
         setLoading(true);
         try {
-            const response = await api.post(`/payments/create?tariff_slug=${tariff}`);
+            // Правильный эндпоинт из payments.py: /create-with-binding
+            const response = await api.post(`/api/payments/create-with-binding?tariff_id=${tariffId}`);
             const { confirmation_url } = response.data;
 
-            window.location.href = confirmation_url;
+            if (confirmation_url) {
+                window.location.href = confirmation_url;
+            } else {
+                throw new Error("No confirmation_url in response");
+            }
         } catch (error) {
+            // Типизированная обработка ошибки вместо any
+            const axiosError = error as AxiosError<{ detail?: string }>;
             console.error("Payment error:", error);
-            alert("Ошибка при создании платежа. Попробуйте позже.");
+            const message = axiosError.response?.data?.detail || "Ошибка при создании платежа. Попробуйте позже.";
+            alert(message);
         } finally {
             setLoading(false);
         }
