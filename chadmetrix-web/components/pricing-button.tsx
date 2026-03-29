@@ -1,11 +1,11 @@
-// components/pricing-button.tsx — упрощенная версия
+// components/pricing-button.tsx
 "use client";
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { createPaymentWithBinding } from "@/lib/api"; // ← Используем функцию из api.ts
+import { createOnetimePayment, createPaymentWithBinding } from "@/lib/api";
 
 interface PricingButtonProps {
     tariff: "analysis" | "htn" | "chad";
@@ -14,11 +14,10 @@ interface PricingButtonProps {
     showAuthModal?: () => void;
 }
 
-// ID тарифов в БД (проверьте и обновите!)
 const TARIFF_IDS: Record<string, number> = {
     analysis: 1,
-    htn: 2,      // Создайте в БД если нет
-    chad: 3,     // Создайте в БД если нет
+    htn: 2,
+    chad: 3,
 };
 
 const TARIFF_CONFIG = {
@@ -45,22 +44,23 @@ export function PricingButton({
 
         const tariffId = TARIFF_IDS[tariff];
         if (!tariffId) {
-            alert("Тариф не найден в системе");
+            alert("Тариф не найден");
             return;
         }
 
         setLoading(true);
         try {
-            const data = await createPaymentWithBinding(tariffId);
+            // Analysis = разовая оплата без сохранения карты
+            // HTN/CHAD = с сохранением карты для автоплатежей
+            const data = tariff === "analysis"
+                ? await createOnetimePayment(tariffId)
+                : await createPaymentWithBinding(tariffId);
 
             if (data.confirmation_url) {
                 window.location.href = data.confirmation_url;
-            } else {
-                throw new Error("No confirmation_url in response");
             }
-        } catch (error) {
-            console.error("Payment error:", error);
-            alert("Ошибка при создании платежа. Попробуйте позже.");
+        } catch {
+            alert("Ошибка при создании платежа");
         } finally {
             setLoading(false);
         }

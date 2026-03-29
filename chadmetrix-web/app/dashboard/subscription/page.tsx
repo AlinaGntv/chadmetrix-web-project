@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { CreditCard, Trash2, Check, X, AlertCircle, Loader2, Plus } from "lucide-react";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { bindCard, getPaymentMethod, removePaymentMethod } from "@/lib/api";
 import { AxiosError } from "axios";
 
 interface PaymentMethod {
@@ -16,24 +16,8 @@ interface PaymentMethod {
     auto_payment_enabled: boolean;
     last4?: string;
     card_type?: string;
-    expiry_month?: string;
-    expiry_year?: string;
 }
 
-// Расширенный тип User 
-interface ExtendedUser {
-    id: string;
-    email: string;
-    full_name: string;
-    avatar_url: string;
-    tariff_type: string;
-    tariff_expire?: string;
-    photo_uses_remaining: number;
-    payment_method_id?: string;
-    auto_payment_enabled?: boolean;
-}
-
-// Компонент для работы с query params (оборачиваем в Suspense)
 function SubscriptionContent() {
     const { isAuthenticated, isLoading, user, refreshUser } = useAuth();
     const router = useRouter();
@@ -44,29 +28,6 @@ function SubscriptionContent() {
     const [actionLoading, setActionLoading] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
-
-    // Приводим user к ExtendedUser
-    const extendedUser = user as ExtendedUser | null;
-
-    // Проверяем query params при загрузке (возврат с ЮKassa)
-    useEffect(() => {
-        const bind = searchParams.get("bind");
-        const payment = searchParams.get("payment");
-        const error = searchParams.get("error");
-
-        if (bind === "success") {
-            setMessage({ type: 'success', text: 'Карта успешно привязана!' });
-            router.replace("/dashboard/subscription");
-            refreshUser?.();
-        } else if (payment === "success") {
-            setMessage({ type: 'success', text: 'Оплата прошла успешно! Карта сохранена для автоплатежей.' });
-            router.replace("/dashboard/subscription");
-            refreshUser?.();
-        } else if (error) {
-            setMessage({ type: 'error', text: 'Произошла ошибка при обработке платежа' });
-            router.replace("/dashboard/subscription");
-        }
-    }, [searchParams, router, refreshUser]);
 
     useEffect(() => {
         if (!isLoading && !isAuthenticated) {
@@ -80,11 +41,32 @@ function SubscriptionContent() {
         }
     }, [isAuthenticated]);
 
+    useEffect(() => {
+        const bind = searchParams.get("bind");
+        const payment = searchParams.get("payment");
+        const error = searchParams.get("error");
+
+        if (bind === "success") {
+            setMessage({ type: 'success', text: 'Карта успешно привязана!' });
+            router.replace("/dashboard/subscription");
+            refreshUser?.();
+            loadPaymentMethod();
+        } else if (payment === "success") {
+            setMessage({ type: 'success', text: 'Оплата прошла успешно! Карта сохранена для автоплатежей.' });
+            router.replace("/dashboard/subscription");
+            refreshUser?.();
+            loadPaymentMethod();
+        } else if (error) {
+            setMessage({ type: 'error', text: 'Произошла ошибка при обработке платежа' });
+            router.replace("/dashboard/subscription");
+        }
+    }, [searchParams, router, refreshUser]);
+
     const loadPaymentMethod = async () => {
         try {
             setLoading(true);
-            const response = await api.get("/api/payments/payment-method");
-            setPaymentMethod(response.data);
+            const data = await getPaymentMethod();
+            setPaymentMethod(data);
         } catch (error) {
             console.error("Failed to load payment method:", error);
             setMessage({ type: 'error', text: 'Не удалось загрузить данные о карте' });
@@ -96,9 +78,9 @@ function SubscriptionContent() {
     const handleBindCard = async () => {
         try {
             setActionLoading(true);
-            const response = await api.post("/api/payments/bind-card");
-            if (response.data.confirmation_url) {
-                window.location.href = response.data.confirmation_url;
+            const data = await bindCard();
+            if (data.confirmation_url) {
+                window.location.href = data.confirmation_url;
             }
         } catch (error) {
             const axiosError = error as AxiosError<{ detail?: string }>;
@@ -114,7 +96,7 @@ function SubscriptionContent() {
     const handleDeleteCard = async () => {
         try {
             setActionLoading(true);
-            await api.delete("/api/payments/payment-method");
+            await removePaymentMethod();
             setPaymentMethod({
                 has_payment_method: false,
                 auto_payment_enabled: false
@@ -160,7 +142,6 @@ function SubscriptionContent() {
     return (
         <div className="min-h-screen pt-24 pb-12 px-4">
             <div className="max-w-2xl mx-auto">
-                {/* Хлебные крошки */}
                 <div className="mb-6">
                     <Link href="/dashboard">
                         <Button variant="ghost" className="text-gray-400 hover:text-white pl-0">
@@ -169,7 +150,6 @@ function SubscriptionContent() {
                     </Link>
                 </div>
 
-                {/* Уведомления */}
                 {message && (
                     <div className={`mb-6 p-4 rounded-xl border ${message.type === 'success'
                         ? 'bg-green-500/10 border-green-500/20 text-green-400'
@@ -190,7 +170,6 @@ function SubscriptionContent() {
                         Управляйте сохраненными картами и настройками автоплатежей
                     </p>
 
-                    {/* Блок сохраненных карт */}
                     <div className="mb-8">
                         <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
                             <CreditCard className="w-5 h-5" />
@@ -239,7 +218,6 @@ function SubscriptionContent() {
                                         </div>
                                     </div>
 
-                                    {/* Чек-бокс с кнопкой удаления карты */}
                                     {showDeleteConfirm ? (
                                         <div className="flex items-center gap-3">
                                             <span className="text-gray-400 text-sm">Удалить карту?</span>
@@ -278,7 +256,6 @@ function SubscriptionContent() {
                                     )}
                                 </div>
 
-                                {/* Информация о статусе */}
                                 {paymentMethod.auto_payment_enabled && (
                                     <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
                                         <p className="text-green-400 text-sm flex items-center gap-2">
@@ -291,7 +268,6 @@ function SubscriptionContent() {
                         )}
                     </div>
 
-                    {/* Информация о подписке */}
                     <div className="p-6 rounded-xl bg-white/5 border border-white/10 mb-6">
                         <h3 className="text-lg font-semibold text-white mb-3">
                             Текущая подписка
@@ -300,13 +276,13 @@ function SubscriptionContent() {
                             <div className="flex justify-between text-sm items-center">
                                 <span className="text-gray-400">Тариф:</span>
                                 <span className="text-white font-medium">
-                                    {getTariffName(extendedUser?.tariff_type)}
+                                    {getTariffName(user?.tariff_type)}
                                 </span>
                             </div>
                             <div className="flex justify-between text-sm items-center">
                                 <span className="text-gray-400">Активна до:</span>
                                 <span className="text-white font-medium">
-                                    {formatDate(extendedUser?.tariff_expire)}
+                                    {formatDate(user?.tariff_expire)}
                                 </span>
                             </div>
                             <div className="flex justify-between text-sm items-center">
@@ -325,13 +301,12 @@ function SubscriptionContent() {
                             <div className="flex justify-between text-sm items-center">
                                 <span className="text-gray-400">Осталось анализов:</span>
                                 <span className="text-white font-medium">
-                                    {extendedUser?.photo_uses_remaining || 0}
+                                    {user?.photo_uses_remaining || 0}
                                 </span>
                             </div>
                         </div>
                     </div>
 
-                    {/* Кнопки управления */}
                     {paymentMethod?.has_payment_method && (
                         <div className="flex gap-3">
                             <Button
@@ -344,7 +319,6 @@ function SubscriptionContent() {
                         </div>
                     )}
 
-                    {/* Примечание */}
                     <div className="mt-6 p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
                         <p className="text-blue-400 text-sm leading-relaxed">
                             <strong>Как работают автоплатежи:</strong><br />
@@ -359,7 +333,6 @@ function SubscriptionContent() {
     );
 }
 
-// Оборачиваем в Suspense из-за useSearchParams
 export default function SubscriptionPage() {
     return (
         <Suspense fallback={
