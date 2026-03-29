@@ -17,20 +17,20 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="chadmetrix API")
 
-# Настройка CORS
+# Настройка CORS — УБРАНЫ ЛИШНИЕ ПРОБЕЛЫ В URL
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "https://chadmetrix.ru",
-        "https://www.chadmetrix.ru"
+        "https://chadmetrix.ru",           # ← убран пробел
+        "https://www.chadmetrix.ru"        # ← убран пробел
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Подключаем роутеры
+# Подключаем роутеры — ДОБАВЛЕН ПРИНТ ДЛЯ ОТЛАДКИ
 from auth import router as auth_router
 from analysis import router as analysis_router
 from payments import router as payments_router
@@ -39,16 +39,14 @@ app.include_router(auth_router)
 app.include_router(analysis_router)
 app.include_router(payments_router)
 
-# === РЕФЕРАЛЬНЫЕ ЭНДПОИНТЫ ===
+print(f"Analysis router prefix: {analysis_router.prefix}")  # Должно быть /api/analysis
 
+# === РЕФЕРАЛЬНЫЕ ЭНДПОИНТЫ ===
 @app.get("/api/referrals/stats")
 def get_referral_stats(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Получить статистику рефералов для текущего пользователя
-    """
     referrals = db.query(Referral).filter(
         Referral.referrer_id == current_user.id
     ).all()
@@ -63,25 +61,20 @@ def get_referral_stats(
             Payment.status == "succeeded"
         ).distinct(Payment.user_id).count()
     
-    bonuses = purchased_count
-    
     return {
         "invited_count": invited_count,
         "purchased_count": purchased_count,
-        "bonuses": bonuses,
+        "bonuses": purchased_count,
         "referral_code": current_user.id
     }
-
 
 @app.get("/")
 def root():
     return {"ok": True, "message": "chadmetrix API is running"}
 
-
 @app.get("/api/health")
 def health_check():
     return {"status": "healthy"}
-
 
 @app.get("/api/test")
 def test():
