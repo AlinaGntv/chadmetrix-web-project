@@ -1,12 +1,11 @@
-// components/pricing-button.tsx
+// components/pricing-button.tsx — упрощенная версия
 "use client";
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { api } from "@/lib/api";
-import { AxiosError } from "axios";
+import { createPaymentWithBinding } from "@/lib/api"; // ← Используем функцию из api.ts
 
 interface PricingButtonProps {
     tariff: "analysis" | "htn" | "chad";
@@ -15,27 +14,17 @@ interface PricingButtonProps {
     showAuthModal?: () => void;
 }
 
-// ID тарифов в БД (проверено: 1=Разовый анализ)
-// Добавьте остальные когда создадите в БД!
+// ID тарифов в БД (проверьте и обновите!)
 const TARIFF_IDS: Record<string, number> = {
-    analysis: 1,  // Разовый анализ - 199₽
-    htn: 2,       // Создайте в БД: INSERT INTO tariffs (id, name, price, reports_count) VALUES (2, 'Подписка HTN', 249, 2);
-    chad: 3       // Создайте в БД: INSERT INTO tariffs (id, name, price, reports_count) VALUES (3, 'Подписка CHAD', 349, 3);
+    analysis: 1,
+    htn: 2,      // Создайте в БД если нет
+    chad: 3,     // Создайте в БД если нет
 };
 
 const TARIFF_CONFIG = {
-    analysis: {
-        label: "Купить за 199₽",
-        loadingLabel: "Переход к оплате...",
-    },
-    htn: {
-        label: "Оформить подписку",
-        loadingLabel: "Переход к оплате...",
-    },
-    chad: {
-        label: "Стать CHAD",
-        loadingLabel: "Переход к оплате...",
-    }
+    analysis: { label: "Купить за 199₽", loadingLabel: "Переход к оплате..." },
+    htn: { label: "Оформить подписку", loadingLabel: "Переход к оплате..." },
+    chad: { label: "Стать CHAD", loadingLabel: "Переход к оплате..." },
 };
 
 export function PricingButton({
@@ -62,30 +51,23 @@ export function PricingButton({
 
         setLoading(true);
         try {
-            // Правильный эндпоинт из payments.py: /create-with-binding
-            const response = await api.post(`/api/payments/create-with-binding?tariff_id=${tariffId}`);
-            const { confirmation_url } = response.data;
+            const data = await createPaymentWithBinding(tariffId);
 
-            if (confirmation_url) {
-                window.location.href = confirmation_url;
+            if (data.confirmation_url) {
+                window.location.href = data.confirmation_url;
             } else {
                 throw new Error("No confirmation_url in response");
             }
         } catch (error) {
-            // Типизированная обработка ошибки вместо any
-            const axiosError = error as AxiosError<{ detail?: string }>;
             console.error("Payment error:", error);
-            const message = axiosError.response?.data?.detail || "Ошибка при создании платежа. Попробуйте позже.";
-            alert(message);
+            alert("Ошибка при создании платежа. Попробуйте позже.");
         } finally {
             setLoading(false);
         }
     };
 
     const getButtonClass = () => {
-        if (variant === "popular") {
-            return "bg-white text-black hover:bg-gray-200";
-        }
+        if (variant === "popular") return "bg-white text-black hover:bg-gray-200";
         return "glass border-white/20 hover:bg-white/10 text-white";
     };
 
