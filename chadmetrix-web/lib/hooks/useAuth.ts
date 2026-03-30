@@ -44,7 +44,7 @@ export function useAuth() {
 
     const logout = async () => {
         try {
-            await api.post("/api/auth/logout");  // ← ИСПРАВИТЬ: было "/auth/logout"
+            await api.post("/auth/logout");
             document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
             setUser(null);
             window.location.href = "/";
