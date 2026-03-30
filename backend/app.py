@@ -12,25 +12,23 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
-# Создаем таблицы
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="chadmetrix API")
 
-# Настройка CORS — УБРАНЫ ЛИШНИЕ ПРОБЕЛЫ В URL
+# ИСПРАВЛЕННЫЙ CORS — без пробелов!
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "https://chadmetrix.ru",           # ← убран пробел
-        "https://www.chadmetrix.ru"        # ← убран пробел
+        "https://chadmetrix.ru",
+        "https://www.chadmetrix.ru"
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Подключаем роутеры — ДОБАВЛЕН ПРИНТ ДЛЯ ОТЛАДКИ
 from auth import router as auth_router
 from analysis import router as analysis_router
 from payments import router as payments_router
@@ -39,9 +37,7 @@ app.include_router(auth_router)
 app.include_router(analysis_router)
 app.include_router(payments_router)
 
-print(f"Analysis router prefix: {analysis_router.prefix}")  # Должно быть /api/analysis
-
-# === РЕФЕРАЛЬНЫЕ ЭНДПОИНТЫ ===
+# === РЕФЕРРАЛЬНЫЕ ЭНДПОИНТЫ ===
 @app.get("/api/referrals/stats")
 def get_referral_stats(
     current_user: User = Depends(get_current_user),
