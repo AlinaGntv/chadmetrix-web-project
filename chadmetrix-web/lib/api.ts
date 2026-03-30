@@ -2,7 +2,7 @@
 import axios from "axios";
 
 export const api = axios.create({
-    baseURL: "",  // ← пустой, т.к. Nginx проксирует /api/ → backend
+    baseURL: "/api",  // ← оставляем /api
     headers: {
         "Content-Type": "application/json",
     },
@@ -34,39 +34,39 @@ api.interceptors.response.use(
 
 // AUTH
 export async function getCurrentUser() {
-    const response = await api.get("/auth/me");
+    const response = await api.get("/auth/me");  // ← было /api/auth/me, теперь /auth/me
     return response.data;
 }
 
 export async function logout() {
-    const response = await api.post("/auth/logout");
+    const response = await api.post("/auth/logout");  // ← было /api/auth/logout, теперь /auth/logout
     return response.data;
 }
 
 // PAYMENTS
 export async function createOnetimePayment(tariffId: number) {
-    const response = await api.post(`/payments/create-onetime?tariff_id=${tariffId}`);
+    const response = await api.post(`/payments/create-onetime?tariff_id=${tariffId}`);  // ← убрали /api
     return response.data;
 }
 
 export async function createPaymentWithBinding(tariffId: number) {
-    const response = await api.post(`/payments/create-with-binding?tariff_id=${tariffId}`);
+    const response = await api.post(`/payments/create-with-binding?tariff_id=${tariffId}`);  // ← убрали /api
     return response.data;
 }
 
 export async function getPaymentMethod() {
-    const response = await api.get("/payments/payment-method");
+    const response = await api.get("/payments/payment-method");  // ← убрали /api
     return response.data;
 }
 
 export async function removePaymentMethod() {
-    const response = await api.delete("/payments/payment-method");
+    const response = await api.delete("/payments/payment-method");  // ← убрали /api
     return response.data;
 }
 
 // ANALYSIS
 export async function createAnalysis(formData: FormData) {
-    const response = await api.post("/analysis", formData, {
+    const response = await api.post("/analysis", formData, {  // ← убрали /api
         headers: {
             "Content-Type": "multipart/form-data",
         },
@@ -75,28 +75,28 @@ export async function createAnalysis(formData: FormData) {
 }
 
 export async function getAnalysis(analysisId: string) {
-    const response = await api.get(`/analysis/${analysisId}`);
+    const response = await api.get(`/analysis/${analysisId}`);  // ← убрали /api
     return response.data;
 }
 
 export async function getAnalysisStatus(analysisId: string) {
-    const response = await api.get(`/analysis/${analysisId}/status`);
+    const response = await api.get(`/analysis/${analysisId}/status`);  // ← убрали /api
     return response.data;
 }
 
 // REPORTS
 export async function getReports() {
-    const response = await api.get("/reports");
+    const response = await api.get("/reports");  // ← убрали /api
     return response.data;
 }
 
 export async function getReport(id: string) {
-    const response = await api.get(`/reports/${id}`);
+    const response = await api.get(`/reports/${id}`);  // ← убрали /api
     return response.data;
 }
 
 // REFERRALS
 export async function getReferralStats() {
-    const response = await api.get("/referrals/stats");
+    const response = await api.get("/referrals/stats");  // ← убрали /api
     return response.data;
 }
