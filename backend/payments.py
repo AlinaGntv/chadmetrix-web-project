@@ -33,24 +33,19 @@ async def bind_card_init(
     db: Session = Depends(get_db)
 ):
     """
-    Привязка карты. В тестовом магазине ЮKassa не принимает 0.00, 
-    используем минимальную сумму 1.00 руб (потом можно вернуть)
+    Привязка карты. ЮKassa требует минимум 1.00 руб (даже в продакшене).
+    Сумма возвращается пользователю автоматически или вручную.
     """
     idempotence_key = str(uuid.uuid4())
     headers = get_auth_headers()
     headers["Idempotence-Key"] = idempotence_key
     
-    # Безопасная проверка тестового магазина
-    shop_id = str(YOOKASSA_SHOP_ID or "")
-    is_test_shop = "test" in shop_id.lower() or len(shop_id) < 6
-    bind_amount = "1.00" if is_test_shop else "0.00"
-    
-    # Явное форматирование суммы с двумя знаками после запятой
-    amount_value = f"{float(bind_amount):.2f}"
+    # ВСЕГДА 1.00 — ЮKassa не принимает 0.00 для привязки!
+    bind_amount = "1.00"
     
     payload = {
         "amount": {
-            "value": amount_value,  # Гарантированно "1.00" или "0.00"
+            "value": bind_amount,
             "currency": "RUB"
         },
         "capture": True,
@@ -62,23 +57,20 @@ async def bind_card_init(
         "save_payment_method": True,
         "metadata": {
             "user_id": current_user.id,
-            "action": "bind_card",
-            "is_test": str(is_test_shop)
+            "action": "bind_card"
         }
     }
     
-    print(f"[BIND-CARD] Shop ID: {shop_id}, Is test: {is_test_shop}, Amount: {amount_value}")
     print(f"[BIND-CARD] Payload: {json.dumps(payload, ensure_ascii=False)}")
     
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            f"{YOOKASSA_API_URL}payments",
+            f"{YOOKASSA_SHOP_ID}payments",
             headers=headers,
             json=payload
         )
         
-        print(f"[BIND-CARD] Response status: {response.status_code}")
-        print(f"[BIND-CARD] Response body: {response.text}")
+        print(f"[BIND-CARD] Response: {response.status_code} - {response.text}")
         
         if response.status_code != 200:
             raise HTTPException(400, f"YooKassa error: {response.text}")
@@ -88,11 +80,11 @@ async def bind_card_init(
         payment = Payment(
             id=str(uuid.uuid4()),
             user_id=current_user.id,
-            amount=float(bind_amount),
+            amount=1.00,
             status="pending",
             yookassa_payment_id=data["id"],
             payment_type="bind_card",
-            meta=json.dumps({"action": "bind_card", "amount": bind_amount})
+            meta=json.dumps({"action": "bind_card", "amount": "1.00"})
         )
         db.add(payment)
         db.commit()
@@ -100,8 +92,7 @@ async def bind_card_init(
         return {
             "confirmation_url": data["confirmation"]["confirmation_url"],
             "payment_id": data["id"],
-            "test_mode": is_test_shop,
-            "amount": amount_value
+            "amount": "1.00"
         }
 
 # ========== РАЗОВАЯ ОПЛАТА (БЕЗ СОХРАНЕНИЯ КАРТЫ) ==========
