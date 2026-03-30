@@ -25,9 +25,6 @@ def get_auth_headers():
         "Idempotence-Key": str(uuid.uuid4())
     }
 
-# ========== ПРИВЯЗКА КАРТЫ (Нулевая сумма) ==========
-
-# backend/payments.py — ключевые изменения
 
 # ========== ПРИВЯЗКА КАРТЫ ==========
 @router.post("/bind-card")
@@ -43,16 +40,20 @@ async def bind_card_init(
     headers = get_auth_headers()
     headers["Idempotence-Key"] = idempotence_key
     
-    # Для тестового магазина: минимум 1.00, для продакшена можно 0.00
-    is_test_shop = "test" in YOOKASSA_SHOP_ID or len(YOOKASSA_SHOP_ID) < 6
+    # Безопасная проверка тестового магазина
+    shop_id = str(YOOKASSA_SHOP_ID or "")
+    is_test_shop = "test" in shop_id.lower() or len(shop_id) < 6
     bind_amount = "1.00" if is_test_shop else "0.00"
+    
+    # Явное форматирование суммы с двумя знаками после запятой
+    amount_value = f"{float(bind_amount):.2f}"
     
     payload = {
         "amount": {
-            "value": bind_amount,
+            "value": amount_value,  # Гарантированно "1.00" или "0.00"
             "currency": "RUB"
         },
-        "capture": True,  # Сразу списываем (возврат потом если нужно)
+        "capture": True,
         "confirmation": {
             "type": "redirect",
             "return_url": f"https://chadmetrix.ru/dashboard/subscription?bind=success"
@@ -62,9 +63,12 @@ async def bind_card_init(
         "metadata": {
             "user_id": current_user.id,
             "action": "bind_card",
-            "is_test": is_test_shop
+            "is_test": str(is_test_shop)
         }
     }
+    
+    print(f"[BIND-CARD] Shop ID: {shop_id}, Is test: {is_test_shop}, Amount: {amount_value}")
+    print(f"[BIND-CARD] Payload: {json.dumps(payload, ensure_ascii=False)}")
     
     async with httpx.AsyncClient() as client:
         response = await client.post(
@@ -72,6 +76,9 @@ async def bind_card_init(
             headers=headers,
             json=payload
         )
+        
+        print(f"[BIND-CARD] Response status: {response.status_code}")
+        print(f"[BIND-CARD] Response body: {response.text}")
         
         if response.status_code != 200:
             raise HTTPException(400, f"YooKassa error: {response.text}")
@@ -81,7 +88,7 @@ async def bind_card_init(
         payment = Payment(
             id=str(uuid.uuid4()),
             user_id=current_user.id,
-            amount=1.00 if is_test_shop else 0,  # Сохраняем реальную сумму
+            amount=float(bind_amount),
             status="pending",
             yookassa_payment_id=data["id"],
             payment_type="bind_card",
@@ -94,7 +101,7 @@ async def bind_card_init(
             "confirmation_url": data["confirmation"]["confirmation_url"],
             "payment_id": data["id"],
             "test_mode": is_test_shop,
-            "amount": bind_amount
+            "amount": amount_value
         }
 
 # ========== РАЗОВАЯ ОПЛАТА (БЕЗ СОХРАНЕНИЯ КАРТЫ) ==========
