@@ -44,11 +44,6 @@ export async function logout() {
 }
 
 // PAYMENTS
-export async function bindCard() {
-    const response = await api.post("/payments/bind-card");
-    return response.data;
-}
-
 export async function createOnetimePayment(tariffId: number) {
     const response = await api.post(`/payments/create-onetime?tariff_id=${tariffId}`);
     return response.data;

@@ -5,9 +5,9 @@ import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { CreditCard, Trash2, Check, X, AlertCircle, Loader2, Plus } from "lucide-react";
+import { CreditCard, Trash2, Check, X, AlertCircle, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { bindCard, getPaymentMethod, removePaymentMethod } from "@/lib/api";
+import { getPaymentMethod, removePaymentMethod } from "@/lib/api";
 import { AxiosError } from "axios";
 
 interface PaymentMethod {
@@ -42,16 +42,10 @@ function SubscriptionContent() {
     }, [isAuthenticated]);
 
     useEffect(() => {
-        const bind = searchParams.get("bind");
         const payment = searchParams.get("payment");
         const error = searchParams.get("error");
 
-        if (bind === "success") {
-            setMessage({ type: 'success', text: 'Карта успешно привязана!' });
-            router.replace("/dashboard/subscription");
-            refreshUser?.();
-            loadPaymentMethod();
-        } else if (payment === "success") {
+        if (payment === "success") {
             setMessage({ type: 'success', text: 'Оплата прошла успешно! Карта сохранена для автоплатежей.' });
             router.replace("/dashboard/subscription");
             refreshUser?.();
@@ -72,24 +66,6 @@ function SubscriptionContent() {
             setMessage({ type: 'error', text: 'Не удалось загрузить данные о карте' });
         } finally {
             setLoading(false);
-        }
-    };
-
-    const handleBindCard = async () => {
-        try {
-            setActionLoading(true);
-            const data = await bindCard();
-            if (data.confirmation_url) {
-                window.location.href = data.confirmation_url;
-            }
-        } catch (error) {
-            const axiosError = error as AxiosError<{ detail?: string }>;
-            console.error("Failed to bind card:", error);
-            setMessage({
-                type: 'error',
-                text: axiosError.response?.data?.detail || 'Не удалось начать привязку карты'
-            });
-            setActionLoading(false);
         }
     };
 
@@ -182,21 +158,10 @@ function SubscriptionContent() {
                             </div>
                         ) : !paymentMethod?.has_payment_method ? (
                             <div className="p-6 rounded-xl bg-white/5 border border-white/10">
-                                <p className="text-gray-400 mb-4">
-                                    Привяжите банковскую карту для автоматического продления подписки
+                                <p className="text-gray-400">
+                                    Карта будет автоматически сохранена при оплате подписки.
+                                    Вы сможете управлять ей здесь после покупки.
                                 </p>
-                                <Button
-                                    onClick={handleBindCard}
-                                    disabled={actionLoading}
-                                    className="bg-blue-600 hover:bg-blue-700 text-white"
-                                >
-                                    {actionLoading ? (
-                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                    ) : (
-                                        <Plus className="w-4 h-4 mr-2" />
-                                    )}
-                                    Привязать карту
-                                </Button>
                             </div>
                         ) : (
                             <div className="space-y-3">
@@ -307,24 +272,11 @@ function SubscriptionContent() {
                         </div>
                     </div>
 
-                    {paymentMethod?.has_payment_method && (
-                        <div className="flex gap-3">
-                            <Button
-                                variant="outline"
-                                className="flex-1 border-gray-600 hover:bg-white/5"
-                                onClick={() => router.push('/dashboard')}
-                            >
-                                Перейти к анализу
-                            </Button>
-                        </div>
-                    )}
-
                     <div className="mt-6 p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
                         <p className="text-blue-400 text-sm leading-relaxed">
                             <strong>Как работают автоплатежи:</strong><br />
-                            При привязке карты вы соглашаетесь на автоматическое списание
-                            средств за продление подписки. Вы можете отвязать карту в любой момент —
-                            автоплатежи будут отключены немедленно.
+                            При оплате подписки ваша карта автоматически сохраняется для будущих платежей.
+                            Вы можете отвязать карту в любой момент — автоплатежи будут отключены немедленно.
                         </p>
                     </div>
                 </div>

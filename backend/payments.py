@@ -25,76 +25,6 @@ def get_auth_headers():
         "Idempotence-Key": str(uuid.uuid4())
     }
 
-
-# ========== ПРИВЯЗКА КАРТЫ ==========
-@router.post("/bind-card")
-async def bind_card_init(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Привязка карты. ЮKassa требует минимум 1.00 руб (даже в продакшене).
-    Сумма возвращается пользователю автоматически или вручную.
-    """
-    idempotence_key = str(uuid.uuid4())
-    headers = get_auth_headers()
-    headers["Idempotence-Key"] = idempotence_key
-    
-    # ВСЕГДА 1.00 — ЮKassa не принимает 0.00 для привязки!
-    bind_amount = "1.00"
-    
-    payload = {
-        "amount": {
-            "value": bind_amount,
-            "currency": "RUB"
-        },
-        "capture": True,
-        "confirmation": {
-            "type": "redirect",
-            "return_url": f"https://chadmetrix.ru/dashboard/subscription?bind=success"
-        },
-        "description": f"Привязка карты (User: {current_user.id[:8]}...)",
-        "save_payment_method": True,
-        "metadata": {
-            "user_id": current_user.id,
-            "action": "bind_card"
-        }
-    }
-    
-    print(f"[BIND-CARD] Payload: {json.dumps(payload, ensure_ascii=False)}")
-    
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            f"{YOOKASSA_API_URL}payments",  # ✅ Правильно: API_URL
-            headers=headers,
-            json=payload
-        )
-        
-        print(f"[BIND-CARD] Response: {response.status_code} - {response.text}")
-        
-        if response.status_code != 200:
-            raise HTTPException(400, f"YooKassa error: {response.text}")
-        
-        data = response.json()
-        
-        payment = Payment(
-            id=str(uuid.uuid4()),
-            user_id=current_user.id,
-            amount=1.00,
-            status="pending",
-            yookassa_payment_id=data["id"],
-            payment_type="bind_card",
-            meta=json.dumps({"action": "bind_card", "amount": "1.00"})
-        )
-        db.add(payment)
-        db.commit()
-        
-        return {
-            "confirmation_url": data["confirmation"]["confirmation_url"],
-            "payment_id": data["id"],
-            "amount": "1.00"
-        }
-
 # ========== РАЗОВАЯ ОПЛАТА (БЕЗ СОХРАНЕНИЯ КАРТЫ) ==========
 
 @router.post("/create-onetime")
@@ -113,7 +43,7 @@ async def create_onetime_payment(
     
     payload = {
         "amount": {
-            "value": str(tariff.price),
+            "value": f"{float(tariff.price):.2f}",
             "currency": "RUB"
         },
         "capture": True,
@@ -149,7 +79,7 @@ async def create_onetime_payment(
             yookassa_payment_id=data["id"],
             tariff_id=tariff_id,
             payment_type="onetime",
-            meta=json.dumps({"onetime": True})
+            meta=json.dumps({"action": "onetime_payment"})
         )
         db.add(payment)
         db.commit()
@@ -177,7 +107,7 @@ async def create_payment_with_binding(
     
     payload = {
         "amount": {
-            "value": str(tariff.price),
+            "value": f"{float(tariff.price):.2f}",
             "currency": "RUB"
         },
         "capture": True,
@@ -248,7 +178,7 @@ async def create_auto_payment(
     
     payload = {
         "amount": {
-            "value": str(tariff.price),
+            "value": f"{float(tariff.price):.2f}",
             "currency": "RUB"
         },
         "capture": True,
@@ -350,14 +280,13 @@ async def yookassa_webhook(
         if payment:
             payment.status = "succeeded"
             
+            # Сохраняем payment_method_id если есть
             if "payment_method" in payment_data and payment_data["payment_method"]:
                 method_id = payment_data["payment_method"].get("id")
                 payment.payment_method_id = method_id
                 
-                meta = json.loads(payment.meta) if payment.meta else {}
-                
-                # Сохраняем карту только для подписок, не для разовых
-                if meta.get("action") in ["bind_card", "payment_with_binding"]:
+                # Сохраняем карту только для подписок (payment_type == "subscription")
+                if payment.payment_type == "subscription":
                     user = db.query(User).filter(User.id == payment.user_id).first()
                     if user:
                         user.payment_method_id = method_id
