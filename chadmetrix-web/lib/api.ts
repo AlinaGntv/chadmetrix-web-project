@@ -2,7 +2,7 @@
 import axios from "axios";
 
 export const api = axios.create({
-    baseURL: "/api",
+    baseURL: "",  // ← пустой, т.к. Nginx проксирует /api/ → backend
     headers: {
         "Content-Type": "application/json",
     },
