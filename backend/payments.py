@@ -65,7 +65,7 @@ async def bind_card_init(
     
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            f"{YOOKASSA_SHOP_ID}payments",
+            f"{YOOKASSA_API_URL}payments",  # ✅ Правильно: API_URL
             headers=headers,
             json=payload
         )
