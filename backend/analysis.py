@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 
-UPLOAD_DIR = "uploads"
+UPLOAD_DIR = "/var/www/chadmetrix/uploads"
 PUBLIC_URL_BASE = "https://chadmetrix.ru/uploads"
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
