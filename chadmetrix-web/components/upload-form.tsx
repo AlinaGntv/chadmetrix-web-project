@@ -1,3 +1,4 @@
+// components/upload-form.tsx
 "use client";
 
 import { useState } from "react";
@@ -20,10 +21,8 @@ export function UploadForm() {
 
     const [isLoading, setIsLoading] = useState(false);
 
-    // Проверка лимитов
     const hasRemainingUses = (user?.photo_uses_remaining || 0) > 0;
 
-    // Профиль доступен только в подписках HTN/CHAD
     const canUseSidePhoto =
         user?.tariff_type === "htn" ||
         user?.tariff_type === "chad" ||
@@ -56,7 +55,6 @@ export function UploadForm() {
     const handleSubmit = async () => {
         if (!front) return;
 
-        // Дополнительная проверка перед отправкой
         if (!hasRemainingUses) {
             alert("У вас закончились анализы. Приобретите тариф для продолжения.");
             return;
@@ -113,8 +111,6 @@ export function UploadForm() {
     return (
         <div className="space-y-6">
 
-            {/* FRONT — блокируется если нет лимитов */}
-
             <PhotoSlot
                 title="Фото анфас"
                 preview={frontPreview}
@@ -128,8 +124,6 @@ export function UploadForm() {
                 }
             />
 
-            {/* SIDE — блокируется если нет подписки */}
-
             <PhotoSlot
                 title="Фото профиль"
                 preview={sidePreview}
@@ -139,21 +133,17 @@ export function UploadForm() {
                 lockMessage="Доступно в подписке HTN/CHAD"
             />
 
-            {/* ИНФО О ЛИМИТАХ */}
-
             <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
                 <AlertCircle className="w-4 h-4" />
                 Осталось анализов: {user?.photo_uses_remaining || 0}
             </div>
-
-            {/* КНОПКА */}
 
             <div className="flex flex-col items-center gap-3">
 
                 {!hasRemainingUses ? (
                     <Link href="/dashboard/subscription">
                         <Button
-                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                            className="bg-white text-black hover:bg-gray-200"
                         >
                             Купить анализ
                         </Button>
@@ -204,7 +194,7 @@ function PhotoSlot({
             <h3 className="text-white mb-3">{title}</h3>
 
             {locked && (
-                <div className="text-xs text-yellow-400 mb-2 flex items-center gap-2">
+                <div className="text-xs text-gray-400 mb-2 flex items-center gap-2">
                     <Lock className="w-4 h-4" />
                     {lockMessage}
                 </div>

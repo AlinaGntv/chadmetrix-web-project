@@ -167,7 +167,7 @@ function SubscriptionContent() {
                             <div className="space-y-3">
                                 <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
                                     <div className="flex items-center gap-4">
-                                        <div className="w-12 h-8 bg-linear-to-r from-blue-600 to-blue-500 rounded flex items-center justify-center text-xs font-bold text-white shadow-lg">
+                                        <div className="w-12 h-8 bg-linear-to-r from-gray-700 to-gray-600 rounded flex items-center justify-center text-xs font-bold text-white shadow-lg">
                                             {paymentMethod.card_type || "CARD"}
                                         </div>
                                         <div>
@@ -272,9 +272,9 @@ function SubscriptionContent() {
                         </div>
                     </div>
 
-                    <div className="mt-6 p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
-                        <p className="text-blue-400 text-sm leading-relaxed">
-                            <strong>Как работают автоплатежи:</strong><br />
+                    <div className="mt-6 p-4 rounded-xl bg-white/5 border border-white/10">
+                        <p className="text-gray-400 text-sm leading-relaxed">
+                            <strong className="text-white">Как работают автоплатежи:</strong><br />
                             При оплате подписки ваша карта автоматически сохраняется для будущих платежей.
                             Вы можете отвязать карту в любой момент — автоплатежи будут отключены немедленно.
                         </p>
