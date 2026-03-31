@@ -1,5 +1,5 @@
 # backend/analysis.py
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks, Form
 from sqlalchemy.orm import Session
 import uuid
 import os
@@ -43,7 +43,7 @@ def compress_image(file: UploadFile) -> BytesIO:
     image.save(output, format='JPEG', quality=JPEG_QUALITY, optimize=True)
     output.seek(0)
     
-    original_size = file.size or 0
+    original_size = getattr(file, 'size', 0) or 0
     compressed_size = len(output.getvalue())
     logger.info(f"[IMAGE] Compressed: {original_size // 1024}KB → {compressed_size // 1024}KB")
     
@@ -52,14 +52,17 @@ def compress_image(file: UploadFile) -> BytesIO:
 
 def save_file(file: UploadFile) -> tuple[str, str]:
     """Сохраняет файл, сжимает если нужно, возвращает (local_path, public_url)"""
-    ext = file.filename.split(".")[-1].lower()
+    ext = file.filename.split(".")[-1].lower() if file.filename else 'jpg'
     if ext not in ['jpg', 'jpeg', 'png', 'webp']:
         raise HTTPException(400, "Only JPG, PNG, WEBP allowed")
     
     # Проверяем размер оригинала
-    file.file.seek(0, 2)
-    original_size = file.file.tell()
-    file.file.seek(0)
+    try:
+        file.file.seek(0, 2)
+        original_size = file.file.tell()
+        file.file.seek(0)
+    except:
+        original_size = 0
     
     if original_size > MAX_FILE_SIZE:
         raise HTTPException(413, f"File too large. Max size is 2MB.")
@@ -80,23 +83,37 @@ def save_file(file: UploadFile) -> tuple[str, str]:
 @router.post("")
 async def create_analysis(
     background_tasks: BackgroundTasks,
-    photo_front: UploadFile = File(...),
-    photo_side: UploadFile | None = File(None),
+    photo_front: UploadFile = File(..., description="Front face photo"),
+    photo_side: UploadFile | None = File(None, description="Side face photo (optional)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Создать анализ лица"""
     
+    # Логирование для отладки
+    logger.info(f"[UPLOAD] User={current_user.id}, front={photo_front.filename if photo_front else 'MISSING'}, side={photo_side.filename if photo_side else 'NONE'}")
+    
+    if not photo_front:
+        raise HTTPException(400, "photo_front is required")
+    
     if current_user.photo_uses_remaining <= 0:
         raise HTTPException(403, "No photo analyses remaining. Please upgrade your plan.")
     
     # Сохраняем фото (с автоматическим сжатием)
-    front_path, front_url = save_file(photo_front)
-    side_url = None
+    try:
+        front_path, front_url = save_file(photo_front)
+    except Exception as e:
+        logger.error(f"[UPLOAD] Failed to save front photo: {e}")
+        raise HTTPException(400, f"Failed to process front photo: {str(e)}")
     
+    side_url = None
     if photo_side:
-        _, side_url = save_file(photo_side)
-
+        try:
+            _, side_url = save_file(photo_side)
+        except Exception as e:
+            logger.error(f"[UPLOAD] Failed to save side photo: {e}")
+            # Продолжаем без side фото
+    
     # Создаем запись анализа
     analysis = Analysis(
         id=str(uuid.uuid4()),
@@ -136,6 +153,8 @@ async def create_analysis(
         front_url,
         current_user.id
     )
+
+    logger.info(f"[UPLOAD] Analysis created: {analysis.id}")
 
     return {
         "analysis_id": analysis.id,

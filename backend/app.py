@@ -1,6 +1,8 @@
 # backend/app.py
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from database import engine, get_db
 from models.models import Base, Referral, User, Payment
@@ -11,6 +13,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+logger = logging.getLogger(__name__)
 
 Base.metadata.create_all(bind=engine)
 
@@ -29,13 +32,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Обработчик ошибок валидации (для отладки 422)
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.error(f"[VALIDATION ERROR] {exc.errors()}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors()}
+    )
+
 # Импорты роутеров
 from auth import router as auth_router
 from analysis import router as analysis_router
 from payments import router as payments_router
 from reports import router as reports_router
 
-# Подключение роутеров — ВАЖЕН ПОРЯДОК: от конкретных к общим
+# Подключение роутеров
 app.include_router(auth_router)      # /api/auth/*
 app.include_router(analysis_router)  # /api/analysis/*
 app.include_router(payments_router)  # /api/payments/*
