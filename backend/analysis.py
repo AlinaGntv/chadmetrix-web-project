@@ -5,6 +5,9 @@ import uuid
 import os
 import json
 import logging
+from io import BytesIO
+
+from PIL import Image
 
 from database import get_db, SessionLocal
 from models.models import Analysis, Photo, User, Report
@@ -17,22 +20,59 @@ router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 
 UPLOAD_DIR = "/var/www/chadmetrix/uploads"
 PUBLIC_URL_BASE = "https://chadmetrix.ru/uploads"
+MAX_FILE_SIZE = 2 * 1024 * 1024  # 2MB
+TARGET_SIZE = (1200, 1200)  # Макс размер после сжатия
+JPEG_QUALITY = 85
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
+def compress_image(file: UploadFile) -> BytesIO:
+    """Сжимает изображение до приемлемого размера"""
+    image = Image.open(file.file)
+    
+    # Конвертируем в RGB (для JPEG)
+    if image.mode in ('RGBA', 'P'):
+        image = image.convert('RGB')
+    
+    # Уменьшаем если слишком большое
+    image.thumbnail(TARGET_SIZE, Image.Resampling.LANCZOS)
+    
+    # Сохраняем с оптимизацией
+    output = BytesIO()
+    image.save(output, format='JPEG', quality=JPEG_QUALITY, optimize=True)
+    output.seek(0)
+    
+    original_size = file.size or 0
+    compressed_size = len(output.getvalue())
+    logger.info(f"[IMAGE] Compressed: {original_size // 1024}KB → {compressed_size // 1024}KB")
+    
+    return output
+
+
 def save_file(file: UploadFile) -> tuple[str, str]:
-    """Сохраняет файл и возвращает (local_path, public_url)"""
+    """Сохраняет файл, сжимает если нужно, возвращает (local_path, public_url)"""
     ext = file.filename.split(".")[-1].lower()
     if ext not in ['jpg', 'jpeg', 'png', 'webp']:
         raise HTTPException(400, "Only JPG, PNG, WEBP allowed")
-        
-    name = f"{uuid.uuid4()}.{ext}"
+    
+    # Проверяем размер оригинала
+    file.file.seek(0, 2)
+    original_size = file.file.tell()
+    file.file.seek(0)
+    
+    if original_size > MAX_FILE_SIZE:
+        raise HTTPException(413, f"File too large. Max size is 2MB.")
+    
+    # Сжимаем всегда для оптимизации
+    compressed = compress_image(file)
+    
+    name = f"{uuid.uuid4()}.jpg"
     local_path = os.path.join(UPLOAD_DIR, name)
     public_url = f"{PUBLIC_URL_BASE}/{name}"
 
     with open(local_path, "wb") as f:
-        f.write(file.file.read())
+        f.write(compressed.getvalue())
 
     return local_path, public_url
 
@@ -47,11 +87,10 @@ async def create_analysis(
 ):
     """Создать анализ лица"""
     
-    # Проверяем лимиты
     if current_user.photo_uses_remaining <= 0:
         raise HTTPException(403, "No photo analyses remaining. Please upgrade your plan.")
     
-    # Сохраняем фото
+    # Сохраняем фото (с автоматическим сжатием)
     front_path, front_url = save_file(photo_front)
     side_url = None
     
@@ -90,7 +129,7 @@ async def create_analysis(
     
     db.commit()
 
-    # Запускаем анализ в фоне — передаём ID, не сессию!
+    # Запускаем анализ в фоне
     background_tasks.add_task(
         process_analysis_task,
         analysis.id,
@@ -119,30 +158,23 @@ async def _process_analysis(analysis_id: str, photo_url: str, user_id: str, db: 
     """Асинхронная обработка анализа"""
     try:
         logger.info(f"[ANALYSIS] Starting LLM analysis for {analysis_id}")
-        logger.info(f"[ANALYSIS] Photo URL: {photo_url}")
         
-        # Вызываем LLM
         result = await vsellm_client.analyze_face(photo_url, days=30)
         
         logger.info(f"[ANALYSIS] LLM returned scores: obj={result.get('objective_score')}, pot={result.get('potential_score')}")
         
-        # Обновляем анализ
         analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first()
         if not analysis:
             logger.error(f"[ANALYSIS] Analysis {analysis_id} not found")
             return
             
-        # Сохраняем метрики
         analysis.metrics = json.dumps(result.get('metrics', {}))
         
-        # Слабые зоны — метрики < 5
         weak_zones = [k for k, v in result.get('metrics', {}).items() if isinstance(v, dict) and v.get('value', 0) < 5]
         analysis.weak_zones = json.dumps(weak_zones)
         
-        # Получаем пользователя для тарифа
         user = db.query(User).filter(User.id == user_id).first()
         
-        # Создаем отчет
         report = Report(
             id=str(uuid.uuid4()),
             user_id=user_id,
@@ -160,7 +192,6 @@ async def _process_analysis(analysis_id: str, photo_url: str, user_id: str, db: 
         db.add(report)
         db.flush()
         
-        # Связываем анализ с отчетом
         analysis.report_id = report.id
         
         db.commit()
