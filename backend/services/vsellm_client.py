@@ -227,10 +227,7 @@ Chad:
                         {"type": "text", "text": prompt},
                         {
                             "type": "image_url",
-                            "image_url": {
-                                "url": photo_url,
-                                "detail": "high"
-                            }
+                            "image_url": photo_url  
                         }
                     ]
                 }
