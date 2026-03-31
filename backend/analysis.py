@@ -48,7 +48,7 @@ async def create_analysis(
     """Создать анализ лица"""
     
     # Проверяем лимиты
-    if current_user.photo_uses_remaining <= 0 and current_user.tariff_type == 'free':
+    if current_user.photo_uses_remaining <= 0:
         raise HTTPException(403, "No photo analyses remaining. Please upgrade your plan.")
     
     # Сохраняем фото

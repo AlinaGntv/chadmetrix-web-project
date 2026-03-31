@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Upload, X, Loader2, Lock } from "lucide-react";
+import { Upload, X, Loader2, Lock, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/hooks/useAuth";
+import Link from "next/link";
 
 export function UploadForm() {
     const router = useRouter();
@@ -19,7 +20,13 @@ export function UploadForm() {
 
     const [isLoading, setIsLoading] = useState(false);
 
-    const canUseTwoPhotos =
+    // Проверка лимитов
+    const hasRemainingUses = (user?.photo_uses_remaining || 0) > 0;
+
+    // Профиль доступен только в подписках HTN/CHAD
+    const canUseSidePhoto =
+        user?.tariff_type === "htn" ||
+        user?.tariff_type === "chad" ||
         user?.tariff_type === "HTN" ||
         user?.tariff_type === "CHAD";
 
@@ -49,6 +56,12 @@ export function UploadForm() {
     const handleSubmit = async () => {
         if (!front) return;
 
+        // Дополнительная проверка перед отправкой
+        if (!hasRemainingUses) {
+            alert("У вас закончились анализы. Приобретите тариф для продолжения.");
+            return;
+        }
+
         setIsLoading(true);
 
         try {
@@ -56,7 +69,7 @@ export function UploadForm() {
 
             formData.append("photo_front", front);
 
-            if (side && canUseTwoPhotos) {
+            if (side && canUseSidePhoto) {
                 formData.append("photo_side", side);
             }
 
@@ -65,6 +78,11 @@ export function UploadForm() {
                 body: formData,
                 credentials: "include",
             });
+
+            if (res.status === 403) {
+                alert("У вас закончились анализы. Приобретите тариф для продолжения.");
+                return;
+            }
 
             if (!res.ok) {
                 throw new Error("Upload failed");
@@ -95,41 +113,67 @@ export function UploadForm() {
     return (
         <div className="space-y-6">
 
-            {/* FRONT */}
+            {/* FRONT — блокируется если нет лимитов */}
 
             <PhotoSlot
                 title="Фото анфас"
                 preview={frontPreview}
                 onChange={handleChange("front")}
                 onClear={() => clear("front")}
+                locked={!hasRemainingUses}
+                lockMessage={
+                    !hasRemainingUses
+                        ? "Нет доступных анализов. Купите тариф."
+                        : undefined
+                }
             />
 
-            {/* SIDE */}
+            {/* SIDE — блокируется если нет подписки */}
 
             <PhotoSlot
                 title="Фото профиль"
                 preview={sidePreview}
                 onChange={handleChange("side")}
                 onClear={() => clear("side")}
-                locked={!canUseTwoPhotos}
+                locked={!canUseSidePhoto}
+                lockMessage="Доступно в подписке HTN/CHAD"
             />
 
-            <div className="flex justify-center">
+            {/* ИНФО О ЛИМИТАХ */}
 
-                <Button
-                    onClick={handleSubmit}
-                    disabled={!front || isLoading}
-                    className="bg-white text-black hover:bg-gray-200"
-                >
-                    {isLoading ? (
-                        <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Анализируем...
-                        </>
-                    ) : (
-                        "Начать анализ"
-                    )}
-                </Button>
+            <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
+                <AlertCircle className="w-4 h-4" />
+                Осталось анализов: {user?.photo_uses_remaining || 0}
+            </div>
+
+            {/* КНОПКА */}
+
+            <div className="flex flex-col items-center gap-3">
+
+                {!hasRemainingUses ? (
+                    <Link href="/dashboard/subscription">
+                        <Button
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                            Купить анализ
+                        </Button>
+                    </Link>
+                ) : (
+                    <Button
+                        onClick={handleSubmit}
+                        disabled={!front || isLoading}
+                        className="bg-white text-black hover:bg-gray-200"
+                    >
+                        {isLoading ? (
+                            <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Анализируем...
+                            </>
+                        ) : (
+                            "Начать анализ"
+                        )}
+                    </Button>
+                )}
 
             </div>
 
@@ -143,6 +187,7 @@ interface PhotoSlotProps {
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
     onClear: () => void
     locked?: boolean
+    lockMessage?: string
 }
 
 function PhotoSlot({
@@ -151,16 +196,17 @@ function PhotoSlot({
     onChange,
     onClear,
     locked = false,
+    lockMessage = "Доступно в подписке",
 }: PhotoSlotProps) {
     return (
-        <div className="glass rounded-2xl p-6 border border-white/10">
+        <div className={`glass rounded-2xl p-6 border border-white/10 ${locked ? 'opacity-60' : ''}`}>
 
             <h3 className="text-white mb-3">{title}</h3>
 
             {locked && (
-                <div className="text-xs text-gray-400 mb-2 flex items-center gap-2">
+                <div className="text-xs text-yellow-400 mb-2 flex items-center gap-2">
                     <Lock className="w-4 h-4" />
-                    Доступно в подписке
+                    {lockMessage}
                 </div>
             )}
 
@@ -172,13 +218,13 @@ function PhotoSlot({
                         accept="image/*"
                         onChange={onChange}
                         disabled={locked}
-                        className="absolute inset-0 opacity-0 cursor-pointer"
+                        className="absolute inset-0 opacity-0 cursor-pointer disabled:cursor-not-allowed"
                     />
 
-                    <Upload className="mx-auto mb-2 text-gray-400" />
+                    <Upload className={`mx-auto mb-2 ${locked ? 'text-gray-600' : 'text-gray-400'}`} />
 
-                    <p className="text-gray-400 text-sm">
-                        Нажмите или перетащите фото
+                    <p className={`text-sm ${locked ? 'text-gray-500' : 'text-gray-400'}`}>
+                        {locked ? "Заблокировано" : "Нажмите или перетащите фото"}
                     </p>
 
                 </div>
