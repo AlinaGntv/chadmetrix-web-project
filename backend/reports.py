@@ -25,8 +25,8 @@ def get_reports(
         {
             "id": report.id,
             "tariff": report.tariff,
-            "overall_score": report.overall_score,
-            "potential_score": report.potential_score,
+            "overall_score": float(report.overall_score) if report.overall_score else None,
+            "potential_score": float(report.potential_score) if report.potential_score else None,
             "created_at": report.created_at.isoformat() if report.created_at else None,
             "updated_at": report.updated_at.isoformat() if report.updated_at else None,
         }
@@ -55,8 +55,8 @@ def get_report(
     return {
         "id": report.id,
         "tariff": report.tariff,
-        "overall_score": report.overall_score,
-        "potential_score": report.potential_score,
+        "overall_score": float(report.overall_score) if report.overall_score else None,
+        "potential_score": float(report.potential_score) if report.potential_score else None,
         "metrics_data": json.loads(report.metrics_data) if report.metrics_data else None,
         "improvement_plan": report.improvement_plan,
         "meta": json.loads(report.meta) if report.meta else None,

@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 from database import engine, get_db
 from models.models import Base, Referral, User, Payment
 from auth import get_current_user
-from reports import router as reports_router
 import logging
 
 logging.basicConfig(
@@ -17,7 +16,7 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="chadmetrix API")
 
-# ИСПРАВЛЕННЫЙ CORS — без пробелов!
+# ИСПРАВЛЕННЫЙ CORS — без пробелов в URL!
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -30,14 +29,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Импорты роутеров
 from auth import router as auth_router
 from analysis import router as analysis_router
 from payments import router as payments_router
+from reports import router as reports_router
 
-app.include_router(auth_router)
-app.include_router(analysis_router)
-app.include_router(payments_router)
-app.include_router(reports_router)
+# Подключение роутеров — ВАЖЕН ПОРЯДОК: от конкретных к общим
+app.include_router(auth_router)      # /api/auth/*
+app.include_router(analysis_router)  # /api/analysis/*
+app.include_router(payments_router)  # /api/payments/*
+app.include_router(reports_router)   # /api/reports/*
 
 # === РЕФЕРРАЛЬНЫЕ ЭНДПОИНТЫ ===
 @app.get("/api/referrals/stats")
@@ -77,3 +79,17 @@ def health_check():
 @app.get("/api/test")
 def test():
     return {"message": "Backend connected successfully!"}
+
+# Диагностика роутов (временно, для отладки)
+@app.get("/api/debug/routes")
+def debug_routes():
+    """Показать все зарегистрированные маршруты"""
+    routes = []
+    for route in app.routes:
+        if hasattr(route, "methods"):
+            routes.append({
+                "path": route.path,
+                "methods": list(route.methods),
+                "name": route.name
+            })
+    return {"routes": routes, "count": len(routes)}
