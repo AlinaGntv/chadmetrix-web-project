@@ -1,32 +1,63 @@
 // app/reports/page.tsx
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { ReportCard } from "@/components/report-card";
-import { Filter, Search, ChevronDown } from "lucide-react";
+import { Filter, Search, ChevronDown, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getReports } from "@/lib/api";
+import Link from "next/link";
 
-// Мок-данные — потом заменишь на API
-const mockReports = [
-    { id: "1", score: 8.4, date: new Date() },
-    { id: "2", score: 7.2, date: new Date(Date.now() - 86400000) },
-    { id: "3", score: 9.1, date: new Date(Date.now() - 172800000) },
-    { id: "4", score: 6.8, date: new Date(Date.now() - 259200000) },
-    { id: "5", score: 8.9, date: new Date(Date.now() - 345600000) },
-    { id: "6", score: 7.5, date: new Date(Date.now() - 432000000) },
-];
+// Интерфейс на основе моделей БД
+interface ReportData {
+    id: string;
+    report?: {
+        overall_score?: number;
+    } | null;
+    created_at?: string;
+}
+
+interface Report {
+    id: string;
+    score: number;
+    date: string;
+}
 
 type SortOption = "newest" | "oldest" | "score-high" | "score-low";
 
 export default function ReportsPage() {
+    const [reports, setReports] = useState<Report[]>([]);
+    const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [sortBy, setSortBy] = useState<SortOption>("newest");
     const [showFilters, setShowFilters] = useState(false);
     const [scoreFilter, setScoreFilter] = useState<{ min: number; max: number } | null>(null);
 
+    // Загрузка реальных отчётов
+    useEffect(() => {
+        const fetchReports = async () => {
+            try {
+                const data: ReportData[] = await getReports();
+                // Преобразуем данные из API в нужный формат
+                const formatted: Report[] = data.map((item) => ({
+                    id: item.id,
+                    score: item.report?.overall_score || 0,
+                    date: item.created_at || new Date().toISOString(),
+                }));
+                setReports(formatted);
+            } catch (error) {
+                console.error("Failed to load reports:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchReports();
+    }, []);
+
     // Фильтрация и сортировка
     const filteredReports = useMemo(() => {
-        let result = [...mockReports];
+        let result = [...reports];
 
         // Поиск по ID или оценке
         if (searchQuery) {
@@ -48,9 +79,9 @@ export default function ReportsPage() {
         result.sort((a, b) => {
             switch (sortBy) {
                 case "newest":
-                    return b.date.getTime() - a.date.getTime();
+                    return new Date(b.date).getTime() - new Date(a.date).getTime();
                 case "oldest":
-                    return a.date.getTime() - b.date.getTime();
+                    return new Date(a.date).getTime() - new Date(b.date).getTime();
                 case "score-high":
                     return b.score - a.score;
                 case "score-low":
@@ -61,7 +92,15 @@ export default function ReportsPage() {
         });
 
         return result;
-    }, [searchQuery, sortBy, scoreFilter]);
+    }, [reports, searchQuery, sortBy, scoreFilter]);
+
+    if (loading) {
+        return (
+            <div className="min-h-screen pt-24 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen pt-24 pb-12 px-4 sm:px-6 lg:px-8">
@@ -70,7 +109,7 @@ export default function ReportsPage() {
                     <div>
                         <h1 className="text-3xl font-bold text-white mb-2">Мои отчёты</h1>
                         <p className="text-gray-400">
-                            {filteredReports.length} из {mockReports.length} отчётов
+                            {filteredReports.length} отчётов
                         </p>
                     </div>
 
@@ -159,23 +198,22 @@ export default function ReportsPage() {
                 {filteredReports.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {filteredReports.map((report) => (
-                            <ReportCard key={report.id} {...report} />
+                            <ReportCard
+                                key={report.id}
+                                id={report.id}
+                                score={report.score}
+                                date={new Date(report.date)}
+                            />
                         ))}
                     </div>
                 ) : (
                     <div className="glass rounded-2xl p-12 border border-white/10 text-center">
-                        <p className="text-gray-400 mb-4">Отчёты не найдены</p>
-                        <Button
-                            variant="outline"
-                            onClick={() => {
-                                setSearchQuery("");
-                                setScoreFilter(null);
-                                setSortBy("newest");
-                            }}
-                            className="glass border-white/20"
-                        >
-                            Сбросить фильтры
-                        </Button>
+                        <p className="text-gray-400 mb-4">У вас пока нет отчётов</p>
+                        <Link href="/analysis/new">
+                            <Button className="bg-white text-black hover:bg-gray-200">
+                                Сделать первый анализ
+                            </Button>
+                        </Link>
                     </div>
                 )}
             </div>
