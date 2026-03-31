@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from database import engine, get_db
 from models.models import Base, Referral, User, Payment
 from auth import get_current_user
+from reports import router as reports_router
 import logging
 
 logging.basicConfig(
@@ -36,6 +37,7 @@ from payments import router as payments_router
 app.include_router(auth_router)
 app.include_router(analysis_router)
 app.include_router(payments_router)
+app.include_router(reports_router)
 
 # === РЕФЕРРАЛЬНЫЕ ЭНДПОИНТЫ ===
 @app.get("/api/referrals/stats")
