@@ -37,7 +37,7 @@ class VseLLMClient:
         days: int = 30,
     ) -> Dict[str, Any]:
         
-        prompt = f""" Привет
+        prompt = f""" Привет! Сколько фото ты видишь? Просто дай ответ цифрой
 
 """
 
