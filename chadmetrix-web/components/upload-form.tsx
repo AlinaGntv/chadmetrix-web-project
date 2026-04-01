@@ -15,14 +15,11 @@ export function UploadForm() {
 
     const [front, setFront] = useState<File | null>(null);
     const [side, setSide] = useState<File | null>(null);
-
     const [frontPreview, setFrontPreview] = useState<string | null>(null);
     const [sidePreview, setSidePreview] = useState<string | null>(null);
-
     const [isLoading, setIsLoading] = useState(false);
 
     const hasRemainingUses = (user?.photo_uses_remaining || 0) > 0;
-
     const canUseSidePhoto =
         user?.tariff_type === "htn" ||
         user?.tariff_type === "chad" ||
@@ -31,7 +28,6 @@ export function UploadForm() {
 
     const readFile = (file: File, type: "front" | "side") => {
         const reader = new FileReader();
-
         reader.onloadend = () => {
             if (type === "front") {
                 setFront(file);
@@ -41,7 +37,6 @@ export function UploadForm() {
                 setSidePreview(reader.result as string);
             }
         };
-
         reader.readAsDataURL(file);
     };
 
@@ -52,9 +47,31 @@ export function UploadForm() {
                 readFile(e.target.files[0], type);
             };
 
+    // Функция для проверки статуса анализа и получения report_id
+    const waitForReport = async (analysisId: string): Promise<string | null> => {
+        const maxAttempts = 30; // 30 секунд максимум
+        for (let i = 0; i < maxAttempts; i++) {
+            try {
+                const res = await fetch(`/api/analysis/${analysisId}/status`, {
+                    credentials: "include",
+                });
+                if (!res.ok) continue;
+
+                const data = await res.json();
+                if (data.has_report && data.report_id) {
+                    return data.report_id;
+                }
+            } catch (e) {
+                console.error("Status check failed:", e);
+            }
+            // Ждём 1 секунду перед следующей проверкой
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        return null;
+    };
+
     const handleSubmit = async () => {
         if (!front) return;
-
         if (!hasRemainingUses) {
             alert("У вас закончились анализы. Приобретите тариф для продолжения.");
             return;
@@ -64,9 +81,7 @@ export function UploadForm() {
 
         try {
             const formData = new FormData();
-
             formData.append("photo_front", front);
-
             if (side && canUseSidePhoto) {
                 formData.append("photo_side", side);
             }
@@ -87,8 +102,17 @@ export function UploadForm() {
             }
 
             const data = await res.json();
+            const analysisId = data.analysis_id;
 
-            router.push(`/reports/${data.analysis_id}`);
+            // Ждём завершения анализа и получаем report_id
+            const reportId = await waitForReport(analysisId);
+
+            if (reportId) {
+                router.push(`/reports/${reportId}`);
+            } else {
+                // Если не дождались, редиректим на список отчётов
+                router.push("/reports");
+            }
 
         } catch (e) {
             console.error(e);
