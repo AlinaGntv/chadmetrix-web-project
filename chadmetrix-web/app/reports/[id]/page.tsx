@@ -7,7 +7,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getAnalysis } from "@/lib/api";
+import { getReport } from "@/lib/api";
 
 interface ReportData {
     id: string;
@@ -34,7 +34,7 @@ export default function ReportDetailPage() {
     useEffect(() => {
         const fetchReport = async () => {
             try {
-                const data = await getAnalysis(params.id as string);
+                const data = await getReport(params.id as string);
                 setReport(data);
             } catch {
                 setError("Не удалось загрузить отчёт");
@@ -238,8 +238,8 @@ function ScoreBox({
 }) {
     return (
         <div className={`rounded-xl p-4 text-center border ${highlight
-                ? "bg-white/10 border-white/20"
-                : "bg-white/5 border-white/10"
+            ? "bg-white/10 border-white/20"
+            : "bg-white/5 border-white/10"
             }`}>
             <p className="text-gray-400 text-xs uppercase tracking-wider mb-1">
                 {title}
