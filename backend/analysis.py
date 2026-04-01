@@ -1,4 +1,3 @@
-# backend/analysis.py
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks, Form
 from sqlalchemy.orm import Session
 import uuid
@@ -30,23 +29,23 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 def compress_image(file: UploadFile) -> BytesIO:
     """Сжимает изображение до приемлемого размера"""
     image = Image.open(file.file)
-    
+
     # Конвертируем в RGB (для JPEG)
     if image.mode in ('RGBA', 'P'):
         image = image.convert('RGB')
-    
+
     # Уменьшаем если слишком большое
     image.thumbnail(TARGET_SIZE, Image.Resampling.LANCZOS)
-    
+
     # Сохраняем с оптимизацией
     output = BytesIO()
     image.save(output, format='JPEG', quality=JPEG_QUALITY, optimize=True)
     output.seek(0)
-    
+
     original_size = getattr(file, 'size', 0) or 0
     compressed_size = len(output.getvalue())
     logger.info(f"[IMAGE] Compressed: {original_size // 1024}KB → {compressed_size // 1024}KB")
-    
+
     return output
 
 
@@ -55,7 +54,7 @@ def save_file(file: UploadFile) -> tuple[str, str]:
     ext = file.filename.split(".")[-1].lower() if file.filename else 'jpg'
     if ext not in ['jpg', 'jpeg', 'png', 'webp']:
         raise HTTPException(400, "Only JPG, PNG, WEBP allowed")
-    
+
     # Проверяем размер оригинала
     try:
         file.file.seek(0, 2)
@@ -63,19 +62,29 @@ def save_file(file: UploadFile) -> tuple[str, str]:
         file.file.seek(0)
     except:
         original_size = 0
-    
+
     if original_size > MAX_FILE_SIZE:
         raise HTTPException(413, f"File too large. Max size is 2MB.")
-    
+
     # Сжимаем всегда для оптимизации
     compressed = compress_image(file)
-    
+
     name = f"{uuid.uuid4()}.jpg"
     local_path = os.path.join(UPLOAD_DIR, name)
     public_url = f"{PUBLIC_URL_BASE}/{name}"
 
     with open(local_path, "wb") as f:
         f.write(compressed.getvalue())
+
+    # Меняем владельца на www-data (UID 33 обычно для www-data)
+    try:
+        os.chown(local_path, 33, 33)  # www-data:www-data
+        os.chmod(local_path, 0o644)     # rw-r--r--
+        logger.info(f"[UPLOAD] File {name} created with www-data ownership")
+    except PermissionError as e:
+        logger.warning(f"[UPLOAD] Could not chown file to www-data (need root): {e}")
+    except Exception as e:
+        logger.warning(f"[UPLOAD] Could not change file permissions: {e}")
 
     return local_path, public_url
 
@@ -89,23 +98,23 @@ async def create_analysis(
     current_user: User = Depends(get_current_user),
 ):
     """Создать анализ лица"""
-    
+
     # Логирование для отладки
     logger.info(f"[UPLOAD] User={current_user.id}, front={photo_front.filename if photo_front else 'MISSING'}, side={photo_side.filename if photo_side else 'NONE'}")
-    
+
     if not photo_front:
         raise HTTPException(400, "photo_front is required")
-    
+
     if current_user.photo_uses_remaining <= 0:
         raise HTTPException(403, "No photo analyses remaining. Please upgrade your plan.")
-    
+
     # Сохраняем фото (с автоматическим сжатием)
     try:
         front_path, front_url = save_file(photo_front)
     except Exception as e:
         logger.error(f"[UPLOAD] Failed to save front photo: {e}")
         raise HTTPException(400, f"Failed to process front photo: {str(e)}")
-    
+
     side_url = None
     if photo_side:
         try:
@@ -113,7 +122,7 @@ async def create_analysis(
         except Exception as e:
             logger.error(f"[UPLOAD] Failed to save side photo: {e}")
             # Продолжаем без side фото
-    
+
     # Создаем запись анализа
     analysis = Analysis(
         id=str(uuid.uuid4()),
@@ -143,7 +152,7 @@ async def create_analysis(
     # Уменьшаем лимит
     if current_user.photo_uses_remaining > 0:
         current_user.photo_uses_remaining -= 1
-    
+
     db.commit()
 
     # Запускаем анализ в фоне
@@ -177,23 +186,23 @@ async def _process_analysis(analysis_id: str, photo_url: str, user_id: str, db: 
     """Асинхронная обработка анализа"""
     try:
         logger.info(f"[ANALYSIS] Starting LLM analysis for {analysis_id}")
-        
+
         result = await vsellm_client.analyze_face(photo_url, days=30)
-        
+
         logger.info(f"[ANALYSIS] LLM returned scores: obj={result.get('objective_score')}, pot={result.get('potential_score')}")
-        
+
         analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first()
         if not analysis:
             logger.error(f"[ANALYSIS] Analysis {analysis_id} not found")
             return
-            
+
         analysis.metrics = json.dumps(result.get('metrics', {}))
-        
+
         weak_zones = [k for k, v in result.get('metrics', {}).items() if isinstance(v, dict) and v.get('value', 0) < 5]
         analysis.weak_zones = json.dumps(weak_zones)
-        
+
         user = db.query(User).filter(User.id == user_id).first()
-        
+
         report = Report(
             id=str(uuid.uuid4()),
             user_id=user_id,
@@ -210,12 +219,12 @@ async def _process_analysis(analysis_id: str, photo_url: str, user_id: str, db: 
         )
         db.add(report)
         db.flush()
-        
+
         analysis.report_id = report.id
-        
+
         db.commit()
         logger.info(f"[ANALYSIS] {analysis_id} completed successfully, report_id={report.id}")
-        
+
     except Exception as e:
         logger.error(f"[ANALYSIS] Failed to process {analysis_id}: {e}", exc_info=True)
         db.rollback()
@@ -233,14 +242,14 @@ def get_analysis(
         Analysis.id == analysis_id,
         Analysis.user_id == current_user.id
     ).first()
-    
+
     if not analysis:
         raise HTTPException(404, "Analysis not found")
-    
+
     report = None
     if analysis.report_id:
         report = db.query(Report).filter(Report.id == analysis.report_id).first()
-    
+
     return {
         "id": analysis.id,
         "status": "completed" if report else "processing",
@@ -269,12 +278,12 @@ def get_analysis_status(
         Analysis.id == analysis_id,
         Analysis.user_id == current_user.id
     ).first()
-    
+
     if not analysis:
         raise HTTPException(404, "Analysis not found")
-    
+
     has_report = analysis.report_id is not None
-    
+
     return {
         "analysis_id": analysis_id,
         "status": "completed" if has_report else "processing",
