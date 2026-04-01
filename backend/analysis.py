@@ -1,3 +1,4 @@
+# backend/analysis.py
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks, Form
 from sqlalchemy.orm import Session
 import uuid
@@ -105,8 +106,16 @@ async def create_analysis(
     if not photo_front:
         raise HTTPException(400, "photo_front is required")
 
-    if current_user.photo_uses_remaining <= 0:
+    # === ПРОВЕРКА БОНУСОВ И ЛИМИТОВ ===
+    has_bonus = current_user.bonus_uses_remaining > 0
+    has_regular = current_user.photo_uses_remaining > 0
+    
+    if not has_bonus and not has_regular:
         raise HTTPException(403, "No photo analyses remaining. Please upgrade your plan.")
+    
+    # Если есть бонус, но нет обычных использований — запрещаем фото профиля
+    if has_bonus and not has_regular and photo_side:
+        raise HTTPException(403, "Bonus analysis allows only front photo. Please upgrade for side profile.")
 
     # Сохраняем фото (с автоматическим сжатием)
     try:
@@ -149,9 +158,15 @@ async def create_analysis(
         )
         db.add(photo2)
 
-    # Уменьшаем лимит
-    if current_user.photo_uses_remaining > 0:
+    # === СПИСАНИЕ БОНУСА ИЛИ ОБЫЧНОГО ЛИМИТА ===
+    if has_bonus:
+        # Используем бонус первым
+        current_user.bonus_uses_remaining -= 1
+        logger.info(f"[UPLOAD] Used bonus use for user {current_user.id}. Remaining: {current_user.bonus_uses_remaining}")
+    elif has_regular:
+        # Используем обычный лимит
         current_user.photo_uses_remaining -= 1
+        logger.info(f"[UPLOAD] Used regular use for user {current_user.id}. Remaining: {current_user.photo_uses_remaining}")
 
     db.commit()
 

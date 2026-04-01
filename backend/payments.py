@@ -6,7 +6,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 from database import get_db
-from models.models import Payment, User, Tariff
+from models.models import Payment, User, Tariff, Referral  # Добавлен Referral
 from auth import get_current_user
 from datetime import datetime, timedelta
 import os
@@ -300,6 +300,20 @@ async def yookassa_webhook(
                     user.tariff_type = tariff.name.lower().replace("подписка ", "").replace(" ", "_")
                     user.tariff_expire = datetime.utcnow() + timedelta(days=30)
                     user.photo_uses_remaining += tariff.reports_count
+                    
+                    # === НАЧИСЛЕНИЕ БОНУСА РЕФЕРЕРУ ===
+                    # Ищем, кто пригласил этого пользователя
+                    referral = db.query(Referral).filter(
+                        Referral.invited_user_id == payment.user_id
+                    ).first()
+                    
+                    if referral:
+                        referrer = db.query(User).filter(
+                            User.id == referral.referrer_id
+                        ).first()
+                        if referrer:
+                            referrer.bonus_uses_remaining += 1
+                            print(f"[REFERRAL] Bonus awarded to {referrer.id} for payment by {payment.user_id}")
             
             db.commit()
         return {"status": "ok"}
