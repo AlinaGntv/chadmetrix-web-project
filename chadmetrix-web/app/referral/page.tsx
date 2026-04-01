@@ -9,11 +9,13 @@ import { Copy, Check, Users, ShoppingCart, Gift, ArrowLeft, Share2 } from "lucid
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
+// Исправленный интерфейс под реальный API ответ
 interface ReferralStats {
     invited_count: number;
-    purchased_count: number;
-    bonuses: number;
-    referral_code: string;
+    paid_count: number;
+    bonuses_earned: number;
+    bonus_uses_remaining: number;
+    referral_link: string;
 }
 
 export default function ReferralPage() {
@@ -54,7 +56,8 @@ export default function ReferralPage() {
         );
     }
 
-    const referralLink = `https://chadmetrix.ru/?ref=${stats?.referral_code || user?.id || "demo123"}`;
+    // Используем referral_link из API или fallback
+    const referralLink = stats?.referral_link || `https://chadmetrix.ru/?ref=${user?.id || "demo123"}`;
 
     const copyToClipboard = () => {
         navigator.clipboard.writeText(referralLink);
@@ -78,11 +81,13 @@ export default function ReferralPage() {
         }
     };
 
+    // Исправленные дефолтные значения
     const displayStats = stats || {
         invited_count: 0,
-        purchased_count: 0,
-        bonuses: 0,
-        referral_code: user?.id || "demo123"
+        paid_count: 0,
+        bonuses_earned: 0,
+        bonus_uses_remaining: 0,
+        referral_link: `https://chadmetrix.ru/?ref=${user?.id || "demo123"}`
     };
 
     return (
@@ -155,7 +160,7 @@ export default function ReferralPage() {
                                 {statsLoading ? (
                                     <span className="inline-block w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
                                 ) : (
-                                    displayStats.purchased_count
+                                    displayStats.paid_count
                                 )}
                             </div>
                             <div className="text-xs text-gray-500">Купили анализ</div>
@@ -167,7 +172,7 @@ export default function ReferralPage() {
                                 {statsLoading ? (
                                     <span className="inline-block w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
                                 ) : (
-                                    displayStats.bonuses
+                                    displayStats.bonus_uses_remaining
                                 )}
                             </div>
                             <div className="text-xs text-gray-500">Бонусов на счету</div>
@@ -175,11 +180,11 @@ export default function ReferralPage() {
                     </div>
 
                     {/* Дополнительная информация */}
-                    {displayStats.bonuses > 0 && (
+                    {displayStats.bonus_uses_remaining > 0 && (
                         <div className="mt-6 p-4 rounded-xl bg-green-500/10 border border-green-500/20">
                             <p className="text-green-400 text-sm">
-                                🎉 У вас есть {displayStats.bonuses} бонусных анализов!
-                                Они автоматически применятся при следующем анализе.
+                                🎉 У вас есть {displayStats.bonus_uses_remaining} бонусных анализов!
+                                Они автоматически применятся при следующем анализе (только анфас).
                             </p>
                         </div>
                     )}
