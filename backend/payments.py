@@ -3,15 +3,17 @@ import uuid
 import base64
 import json
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks, Query
 from sqlalchemy.orm import Session
 from database import get_db
-from models.models import Payment, User, Tariff, Referral  # Добавлен Referral
+from models.models import Payment, User, Tariff, Referral, Promocode, PromocodeUsage
 from auth import get_current_user
 from datetime import datetime, timedelta
 import os
+import logging
 
 router = APIRouter(prefix="/api/payments", tags=["payments"])
+logger = logging.getLogger(__name__)
 
 YOOKASSA_SHOP_ID = os.getenv("YOOKASSA_SHOP_ID")
 YOOKASSA_SECRET_KEY = os.getenv("YOOKASSA_SECRET_KEY")
@@ -25,11 +27,47 @@ def get_auth_headers():
         "Idempotence-Key": str(uuid.uuid4())
     }
 
+def apply_promocode(promocode_code: str, amount: float, user_id: str, db: Session):
+    """Применить промокод и вернуть сумму со скидкой"""
+    promocode = db.query(Promocode).filter(
+        Promocode.code == promocode_code,
+        Promocode.active == True,
+        Promocode.expires_at > datetime.utcnow()
+    ).first()
+    
+    if not promocode:
+        raise HTTPException(404, "Promocode not found or expired")
+    
+    # Проверяем лимит использований
+    if promocode.max_uses and promocode.uses_count >= promocode.max_uses:
+        raise HTTPException(400, "Promocode usage limit exceeded")
+    
+    # Проверяем, не использовал ли пользователь уже этот промокод
+    existing_usage = db.query(PromocodeUsage).filter(
+        PromocodeUsage.promocode_id == promocode.id,
+        PromocodeUsage.user_id == user_id
+    ).first()
+    
+    if existing_usage:
+        raise HTTPException(400, "You have already used this promocode")
+    
+    discount_amount = amount * promocode.discount_percent / 100
+    final_amount = amount - discount_amount
+    
+    return {
+        "promocode": promocode,
+        "original_amount": amount,
+        "discount_amount": discount_amount,
+        "final_amount": final_amount,
+        "discount_percent": promocode.discount_percent
+    }
+
 # ========== РАЗОВАЯ ОПЛАТА (БЕЗ СОХРАНЕНИЯ КАРТЫ) ==========
 
 @router.post("/create-onetime")
 async def create_onetime_payment(
     tariff_id: int,
+    promocode: str = Query(None, description="Промокод на скидку"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -37,13 +75,26 @@ async def create_onetime_payment(
     if not tariff:
         raise HTTPException(404, "Tariff not found")
     
+    original_amount = float(tariff.price)
+    final_amount = original_amount
+    discount_info = None
+    
+    # Применяем промокод если он есть
+    if promocode:
+        try:
+            discount_info = apply_promocode(promocode, original_amount, current_user.id, db)
+            final_amount = discount_info["final_amount"]
+            logger.info(f"Applied promocode {promocode} for user {current_user.id}, discount: {discount_info['discount_amount']}")
+        except HTTPException as e:
+            raise e
+    
     idempotence_key = str(uuid.uuid4())
     headers = get_auth_headers()
     headers["Idempotence-Key"] = idempotence_key
     
     payload = {
         "amount": {
-            "value": f"{float(tariff.price):.2f}",
+            "value": f"{final_amount:.2f}",
             "currency": "RUB"
         },
         "capture": True,
@@ -55,7 +106,10 @@ async def create_onetime_payment(
         "metadata": {
             "user_id": current_user.id,
             "tariff_id": tariff_id,
-            "action": "onetime_payment"
+            "action": "onetime_payment",
+            "original_amount": str(original_amount),
+            "discount_percent": str(discount_info["discount_percent"]) if discount_info else "0",
+            "promocode": promocode or ""
         }
     }
     
@@ -74,19 +128,49 @@ async def create_onetime_payment(
         payment = Payment(
             id=str(uuid.uuid4()),
             user_id=current_user.id,
-            amount=tariff.price,
+            amount=final_amount,
             status="pending",
             yookassa_payment_id=data["id"],
             tariff_id=tariff_id,
             payment_type="onetime",
-            meta=json.dumps({"action": "onetime_payment"})
+            meta=json.dumps({
+                "action": "onetime_payment",
+                "original_amount": str(original_amount),
+                "promocode": promocode or None
+            })
         )
         db.add(payment)
+        
+        # Если использован промокод, создаем запись об использовании
+        if discount_info:
+            promocode_usage = PromocodeUsage(
+                id=str(uuid.uuid4()),
+                promocode_id=discount_info["promocode"].id,
+                user_id=current_user.id,
+                payment_id=payment.id,
+                original_amount=original_amount,
+                discount_amount=discount_info["discount_amount"],
+                final_amount=final_amount
+            )
+            db.add(promocode_usage)
+            
+            # Обновляем счетчик использований промокода
+            discount_info["promocode"].uses_count += 1
+            
+            # Если это промокод за отзыв - отмечаем, что пользователь использовал скидку
+            if discount_info["promocode"].code.startswith("REVIEW20_"):
+                current_user.has_used_discount = True
+                current_user.can_use_discount = False
+        
         db.commit()
         
         return {
             "confirmation_url": data["confirmation"]["confirmation_url"],
-            "payment_id": data["id"]
+            "payment_id": data["id"],
+            "discount_applied": discount_info is not None,
+            "discount_percent": discount_info["discount_percent"] if discount_info else 0,
+            "original_amount": original_amount,
+            "final_amount": final_amount
         }
 
 # ========== ОПЛАТА С СОХРАНЕНИЕМ КАРТЫ (Подписки) ==========
@@ -94,6 +178,7 @@ async def create_onetime_payment(
 @router.post("/create-with-binding")
 async def create_payment_with_binding(
     tariff_id: int,
+    promocode: str = Query(None, description="Промокод на скидку"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -101,13 +186,26 @@ async def create_payment_with_binding(
     if not tariff:
         raise HTTPException(404, "Tariff not found")
     
+    original_amount = float(tariff.price)
+    final_amount = original_amount
+    discount_info = None
+    
+    # Применяем промокод если он есть
+    if promocode:
+        try:
+            discount_info = apply_promocode(promocode, original_amount, current_user.id, db)
+            final_amount = discount_info["final_amount"]
+            logger.info(f"Applied promocode {promocode} for user {current_user.id}, discount: {discount_info['discount_amount']}")
+        except HTTPException as e:
+            raise e
+    
     idempotence_key = str(uuid.uuid4())
     headers = get_auth_headers()
     headers["Idempotence-Key"] = idempotence_key
     
     payload = {
         "amount": {
-            "value": f"{float(tariff.price):.2f}",
+            "value": f"{final_amount:.2f}",
             "currency": "RUB"
         },
         "capture": True,
@@ -120,7 +218,10 @@ async def create_payment_with_binding(
         "metadata": {
             "user_id": current_user.id,
             "tariff_id": tariff_id,
-            "action": "payment_with_binding"
+            "action": "payment_with_binding",
+            "original_amount": str(original_amount),
+            "discount_percent": str(discount_info["discount_percent"]) if discount_info else "0",
+            "promocode": promocode or ""
         }
     }
     
@@ -139,19 +240,49 @@ async def create_payment_with_binding(
         payment = Payment(
             id=str(uuid.uuid4()),
             user_id=current_user.id,
-            amount=tariff.price,
+            amount=final_amount,
             status="pending",
             yookassa_payment_id=data["id"],
             tariff_id=tariff_id,
             payment_type="subscription",
-            meta=json.dumps({"save_payment_method": True})
+            meta=json.dumps({
+                "save_payment_method": True,
+                "original_amount": str(original_amount),
+                "promocode": promocode or None
+            })
         )
         db.add(payment)
+        
+        # Если использован промокод, создаем запись об использовании
+        if discount_info:
+            promocode_usage = PromocodeUsage(
+                id=str(uuid.uuid4()),
+                promocode_id=discount_info["promocode"].id,
+                user_id=current_user.id,
+                payment_id=payment.id,
+                original_amount=original_amount,
+                discount_amount=discount_info["discount_amount"],
+                final_amount=final_amount
+            )
+            db.add(promocode_usage)
+            
+            # Обновляем счетчик использований промокода
+            discount_info["promocode"].uses_count += 1
+            
+            # Если это промокод за отзыв - отмечаем, что пользователь использовал скидку
+            if discount_info["promocode"].code.startswith("REVIEW20_"):
+                current_user.has_used_discount = True
+                current_user.can_use_discount = False
+        
         db.commit()
         
         return {
             "confirmation_url": data["confirmation"]["confirmation_url"],
-            "payment_id": data["id"]
+            "payment_id": data["id"],
+            "discount_applied": discount_info is not None,
+            "discount_percent": discount_info["discount_percent"] if discount_info else 0,
+            "original_amount": original_amount,
+            "final_amount": final_amount
         }
 
 # ========== АВТОПЛАТЕЖ ==========
@@ -313,7 +444,7 @@ async def yookassa_webhook(
                         ).first()
                         if referrer:
                             referrer.bonus_uses_remaining += 1
-                            print(f"[REFERRAL] Bonus awarded to {referrer.id} for payment by {payment.user_id}")
+                            logger.info(f"[REFERRAL] Bonus awarded to {referrer.id} for payment by {payment.user_id}")
             
             db.commit()
         return {"status": "ok"}

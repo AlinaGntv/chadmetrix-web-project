@@ -1,3 +1,4 @@
+// components/hero.tsx
 "use client";
 
 import Link from "next/link";
@@ -44,21 +45,25 @@ export function Hero() {
                     </div>
 
                     <div className="mt-16 flex items-center justify-center space-x-8 text-gray-500">
-                        <div className="flex items-center space-x-2">
+                        {/* Кликабельная реферальная программа */}
+                        <Link href="/referral" className="flex items-center space-x-2 hover:text-white transition-colors group">
                             <div className="flex -space-x-2">
                                 {[1, 2, 3, 4].map((i) => (
-                                    <div key={i} className="w-8 h-8 rounded-full bg-linear-to-br from-gray-700 to-gray-900 border-2 border-black" />
+                                    <div key={i} className="w-8 h-8 rounded-full bg-linear-to-br from-gray-700 to-gray-900 border-2 border-black group-hover:from-gray-600 group-hover:to-gray-800 transition-all" />
                                 ))}
                             </div>
-                            <span className="text-sm">Реферальная программа</span>
-                        </div>
+                            <span className="text-sm group-hover:text-white transition-colors">Реферальная программа</span>
+                        </Link>
+
                         <div className="h-4 w-px bg-gray-800" />
-                        <div className="flex items-center space-x-1">
+
+                        {/* Кликабельные отзывы */}
+                        <Link href="/reviews" className="flex items-center space-x-1 hover:text-white transition-colors group">
                             {[1, 2, 3, 4, 5].map((i) => (
-                                <Star key={i} className="w-4 h-4 text-gray-300 fill-gray-300" />
+                                <Star key={i} className="w-4 h-4 text-gray-300 fill-gray-300 group-hover:text-yellow-500 group-hover:fill-yellow-500 transition-colors" />
                             ))}
-                            <span className="text-sm ml-2">4.9 рейтинг</span>
-                        </div>
+                            <span className="text-sm ml-2 group-hover:text-white transition-colors">4.9 рейтинг</span>
+                        </Link>
                     </div>
                 </div>
             </div>

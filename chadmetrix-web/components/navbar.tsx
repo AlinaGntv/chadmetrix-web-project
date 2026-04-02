@@ -1,3 +1,4 @@
+// components/navbar.tsx
 "use client";
 
 import Link from "next/link";
@@ -112,6 +113,13 @@ export function Navbar() {
                         </Link>
 
                         <Link
+                            href="/reviews"
+                            className="text-sm text-gray-300 hover:text-white transition-colors"
+                        >
+                            Отзывы
+                        </Link>
+
+                        <Link
                             href="/dashboard"
                             className="text-sm text-gray-300 hover:text-white transition-colors"
                         >
@@ -212,6 +220,7 @@ export function Navbar() {
                         <Link
                             href="/"
                             className="block px-3 py-2 text-base text-gray-300 hover:text-white"
+                            onClick={() => setIsOpen(false)}
                         >
                             Главная
                         </Link>
@@ -219,6 +228,7 @@ export function Navbar() {
                         <Link
                             href="/analysis/new"
                             className="block px-3 py-2 text-base text-gray-300 hover:text-white"
+                            onClick={() => setIsOpen(false)}
                         >
                             Анализ
                         </Link>
@@ -226,13 +236,23 @@ export function Navbar() {
                         <Link
                             href="/reports"
                             className="block px-3 py-2 text-base text-gray-300 hover:text-white"
+                            onClick={() => setIsOpen(false)}
                         >
                             Отчёты
                         </Link>
 
                         <Link
+                            href="/reviews"
+                            className="block px-3 py-2 text-base text-gray-300 hover:text-white"
+                            onClick={() => setIsOpen(false)}
+                        >
+                            Отзывы
+                        </Link>
+
+                        <Link
                             href="/dashboard"
                             className="block px-3 py-2 text-base text-gray-300 hover:text-white"
+                            onClick={() => setIsOpen(false)}
                         >
                             Кабинет
                         </Link>
