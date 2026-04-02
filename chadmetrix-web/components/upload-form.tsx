@@ -31,11 +31,12 @@ export function UploadForm() {
 
     // Разблокируем профиль для всех, у кого есть анализы (включая бонусные)
     // Или для подписок HTN/CHAD
-    const canUseSidePhoto = hasRemainingUses ||
-        user?.tariff_type === "htn" ||
+    const canUseSidePhoto = user?.tariff_type === "htn" ||
         user?.tariff_type === "chad" ||
         user?.tariff_type === "HTN" ||
-        user?.tariff_type === "CHAD";
+        user?.tariff_type === "CHAD" ||
+        // Дополнительно: если есть бонусные анализы, тоже можно использовать профиль
+        (user?.bonus_uses_remaining && user.bonus_uses_remaining > 0);
 
     const readFile = (file: File, type: "front" | "side") => {
         const reader = new FileReader();
