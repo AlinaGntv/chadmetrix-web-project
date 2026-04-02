@@ -2,9 +2,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Star, MessageCircle, User as UserIcon } from "lucide-react";
+import { Star, MessageCircle, User as UserIcon, Trash2, Loader2 } from "lucide-react";
 import Image from "next/image";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 interface Review {
     id: string;
@@ -22,19 +23,68 @@ interface ReviewStats {
     rating_distribution: Record<number, number>;
 }
 
+// Компонент кнопки удаления для админа
+function AdminDeleteButton({ reviewId, onDelete }: { reviewId: string; onDelete: () => void }) {
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [showConfirm, setShowConfirm] = useState(false);
+
+    const handleDelete = async () => {
+        setIsDeleting(true);
+        try {
+            await api.delete(`/reviews/${reviewId}`);
+            onDelete();
+        } catch (error) {
+            console.error("Failed to delete review:", error);
+            alert("Ошибка при удалении отзыва");
+        } finally {
+            setIsDeleting(false);
+            setShowConfirm(false);
+        }
+    };
+
+    if (showConfirm) {
+        return (
+            <div className="absolute top-2 right-2 flex gap-1 bg-black/80 rounded-lg p-1 z-10">
+                <button
+                    onClick={handleDelete}
+                    disabled={isDeleting}
+                    className="px-2 py-1 rounded bg-red-500 hover:bg-red-600 text-white text-xs"
+                >
+                    {isDeleting ? <Loader2 className="w-3 h-3 animate-spin" /> : "Удалить"}
+                </button>
+                <button
+                    onClick={() => setShowConfirm(false)}
+                    className="px-2 py-1 rounded bg-gray-600 hover:bg-gray-500 text-white text-xs"
+                >
+                    Отмена
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <button
+            onClick={() => setShowConfirm(true)}
+            className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/50 z-10"
+            title="Удалить отзыв"
+        >
+            <Trash2 className="w-3.5 h-3.5 text-white" />
+        </button>
+    );
+}
+
 export function ReviewsSection() {
+    const { user } = useAuth();
     const [reviews, setReviews] = useState<Review[]>([]);
     const [stats, setStats] = useState<ReviewStats | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    useEffect(() => {
-        fetchReviews();
-        fetchStats();
-    }, []);
+    // Проверка на админа - ЗАМЕНИТЕ НА СВОИ EMAIL
+    const isAdmin = user?.email === "gntv.surname@gmail.com";
 
     const fetchReviews = async () => {
         try {
-            const response = await api.get("/reviews/list?limit=6");
+            const response = await api.get("/reviews/list?limit=50");
             setReviews(response.data);
         } catch (error) {
             console.error("Failed to fetch reviews:", error);
@@ -51,6 +101,16 @@ export function ReviewsSection() {
             console.error("Failed to fetch stats:", error);
         }
     };
+
+    const handleReviewDeleted = () => {
+        fetchReviews();
+        fetchStats();
+    };
+
+    useEffect(() => {
+        fetchReviews();
+        fetchStats();
+    }, []);
 
     const formatDate = (dateString: string) => {
         const date = new Date(dateString);
@@ -101,8 +161,16 @@ export function ReviewsSection() {
                 {reviews.map((review) => (
                     <div
                         key={review.id}
-                        className="glass rounded-xl p-5 border border-white/10 hover:border-white/20 transition-all"
+                        className="glass rounded-xl p-5 border border-white/10 hover:border-white/20 transition-all relative group"
                     >
+                        {/* Админ-кнопка удаления */}
+                        {isAdmin && (
+                            <AdminDeleteButton
+                                reviewId={review.id}
+                                onDelete={handleReviewDeleted}
+                            />
+                        )}
+
                         {/* User info */}
                         <div className="flex items-center gap-3 mb-3">
                             <div className="w-10 h-10 rounded-full bg-linear-to-br from-gray-700 to-gray-900 overflow-hidden shrink-0">

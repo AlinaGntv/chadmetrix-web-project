@@ -62,13 +62,19 @@ export async function logout() {
 }
 
 // PAYMENTS
-export async function createOnetimePayment(tariffId: number) {
-    const response = await api.post(`/payments/create-onetime?tariff_id=${tariffId}`);
+export async function createOnetimePayment(tariffId: number, promocode?: string) {
+    const url = promocode
+        ? `/payments/create-onetime?tariff_id=${tariffId}&promocode=${encodeURIComponent(promocode)}`
+        : `/payments/create-onetime?tariff_id=${tariffId}`;
+    const response = await api.post(url);
     return response.data;
 }
 
-export async function createPaymentWithBinding(tariffId: number) {
-    const response = await api.post(`/payments/create-with-binding?tariff_id=${tariffId}`);
+export async function createPaymentWithBinding(tariffId: number, promocode?: string) {
+    const url = promocode
+        ? `/payments/create-with-binding?tariff_id=${tariffId}&promocode=${encodeURIComponent(promocode)}`
+        : `/payments/create-with-binding?tariff_id=${tariffId}`;
+    const response = await api.post(url);
     return response.data;
 }
 

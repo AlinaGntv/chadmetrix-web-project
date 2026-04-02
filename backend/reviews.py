@@ -206,3 +206,31 @@ async def apply_discount(
         "discount_percent": promocode.discount_percent,
         "expires_at": promocode.expires_at
     }
+
+@router.delete("/{review_id}")
+async def delete_review(
+    review_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Удалить отзыв (только для админов)"""
+    
+    # Список email админов - ЗАМЕНИТЕ НА СВОИ
+    ADMIN_EMAILS = [
+        "gntv.surname@gmail.com"
+    ]
+    
+    if current_user.email not in ADMIN_EMAILS:
+        raise HTTPException(403, "Только администраторы могут удалять отзывы")
+    
+    review = db.query(Review).filter(Review.id == review_id).first()
+    if not review:
+        raise HTTPException(404, "Отзыв не найден")
+    
+    # Мягкое удаление
+    review.is_deleted = True
+    db.commit()
+    
+    logger.info(f"Review {review_id} deleted by admin {current_user.email}")
+    
+    return {"message": "Отзыв удалён"}

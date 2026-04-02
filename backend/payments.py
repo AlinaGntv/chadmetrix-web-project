@@ -51,6 +51,14 @@ def apply_promocode(promocode_code: str, amount: float, user_id: str, db: Sessio
     if existing_usage:
         raise HTTPException(400, "You have already used this promocode")
     
+    # Дополнительная проверка для REVIEW20_ промокодов
+    if promocode.code.startswith("REVIEW20_"):
+        user = db.query(User).filter(User.id == user_id).first()
+        if user and user.has_used_discount:
+            raise HTTPException(400, "You have already used your review discount")
+        if user and not user.can_use_discount:
+            raise HTTPException(400, "Discount not available")
+    
     discount_amount = amount * promocode.discount_percent / 100
     final_amount = amount - discount_amount
     
@@ -285,7 +293,7 @@ async def create_payment_with_binding(
             "final_amount": final_amount
         }
 
-# ========== АВТОПЛАТЕЖ ==========
+# ========== АВТОПЛАТЕЖ (БЕЗ ПРОМОКОДА) ==========
 
 @router.post("/auto-payment")
 async def create_auto_payment(
@@ -307,6 +315,7 @@ async def create_auto_payment(
     headers = get_auth_headers()
     headers["Idempotence-Key"] = idempotence_key
     
+    # Автоплатеж всегда по полной цене, без промокода
     payload = {
         "amount": {
             "value": f"{float(tariff.price):.2f}",
@@ -423,14 +432,19 @@ async def yookassa_webhook(
                         user.payment_method_id = method_id
                         user.auto_payment_enabled = True
             
-            # Активируем подписку
+            # Активируем подписку/анализы
             if payment.tariff_id:
                 user = db.query(User).filter(User.id == payment.user_id).first()
                 tariff = db.query(Tariff).filter(Tariff.id == payment.tariff_id).first()
                 if user and tariff:
-                    user.tariff_type = tariff.name.lower().replace("подписка ", "").replace(" ", "_")
-                    user.tariff_expire = datetime.utcnow() + timedelta(days=30)
-                    user.photo_uses_remaining += tariff.reports_count
+                    # Для подписок
+                    if payment.payment_type == "subscription":
+                        user.tariff_type = tariff.name.lower().replace("подписка ", "").replace(" ", "_")
+                        user.tariff_expire = datetime.utcnow() + timedelta(days=30)
+                        user.photo_uses_remaining += tariff.reports_count
+                    # Для разовых платежей
+                    elif payment.payment_type == "onetime":
+                        user.photo_uses_remaining += tariff.reports_count
                     
                     # === НАЧИСЛЕНИЕ БОНУСА РЕФЕРЕРУ ===
                     # Ищем, кто пригласил этого пользователя
@@ -456,3 +470,62 @@ async def yookassa_webhook(
         return {"status": "ok"}
     
     return {"status": "ignored"}
+
+# ========== ВАЛИДАЦИЯ ПРОМОКОДА ==========
+
+@router.get("/validate-promocode")
+async def validate_promocode(
+    code: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Проверить промокод без применения"""
+    promocode = db.query(Promocode).filter(
+        Promocode.code == code,
+        Promocode.active == True,
+        Promocode.expires_at > datetime.utcnow()
+    ).first()
+    
+    if not promocode:
+        return {
+            "valid": False,
+            "message": "Промокод не найден или истёк"
+        }
+    
+    # Проверяем лимит использований
+    if promocode.max_uses and promocode.uses_count >= promocode.max_uses:
+        return {
+            "valid": False,
+            "message": "Промокод уже использован"
+        }
+    
+    # Проверяем, не использовал ли пользователь уже этот промокод
+    existing_usage = db.query(PromocodeUsage).filter(
+        PromocodeUsage.promocode_id == promocode.id,
+        PromocodeUsage.user_id == current_user.id
+    ).first()
+    
+    if existing_usage:
+        return {
+            "valid": False,
+            "message": "Вы уже использовали этот промокод"
+        }
+    
+    # Дополнительная проверка для REVIEW20_ промокодов
+    if promocode.code.startswith("REVIEW20_"):
+        if current_user.has_used_discount:
+            return {
+                "valid": False,
+                "message": "Вы уже использовали скидку за отзыв"
+            }
+        if not current_user.can_use_discount:
+            return {
+                "valid": False,
+                "message": "Скидка за отзыв недоступна"
+            }
+    
+    return {
+        "valid": True,
+        "discount_percent": promocode.discount_percent,
+        "expires_at": promocode.expires_at.isoformat()
+    }
