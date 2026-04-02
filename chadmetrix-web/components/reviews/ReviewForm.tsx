@@ -1,8 +1,8 @@
 // components/reviews/ReviewForm.tsx
 "use client";
 
-import { useState } from "react";
-import { Star, AlertCircle, Gift } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Star, AlertCircle, Gift, Lock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -22,13 +22,37 @@ interface ApiError {
 }
 
 export function ReviewForm({ onSuccess }: ReviewFormProps) {
-    const { refreshUser } = useAuth(); // Убрали неиспользуемый user
+    const { refreshUser } = useAuth();
     const [rating, setRating] = useState(0);
     const [hoveredRating, setHoveredRating] = useState(0);
     const [comment, setComment] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [canReview, setCanReview] = useState<boolean | null>(null);
+    const [cannotReviewReason, setCannotReviewReason] = useState<string>("");
+    const [isChecking, setIsChecking] = useState(true);
     const [success, setSuccess] = useState<{ hasDiscount: boolean; discountCode?: string } | null>(null);
+
+    // Проверяем, может ли пользователь оставить отзыв
+    useEffect(() => {
+        checkCanReview();
+    }, []);
+
+    const checkCanReview = async () => {
+        try {
+            const response = await api.get("/reviews/can-review");
+            setCanReview(response.data.can_review);
+            if (!response.data.can_review) {
+                setCannotReviewReason(response.data.reason);
+            }
+        } catch (error) {
+            console.error("Failed to check review permission:", error);
+            setCanReview(false);
+            setCannotReviewReason("Не удалось проверить возможность оставить отзыв");
+        } finally {
+            setIsChecking(false);
+        }
+    };
 
     const handleSubmit = async () => {
         if (rating === 0) {
@@ -59,6 +83,8 @@ export function ReviewForm({ onSuccess }: ReviewFormProps) {
             const error = err as ApiError;
             if (error.response?.status === 400) {
                 setError(error.response.data?.detail || "Ошибка при отправке отзыва");
+            } else if (error.response?.status === 403) {
+                setError(error.response.data?.detail || "Только пользователи, совершившие покупку, могут оставлять отзывы");
             } else {
                 setError("Произошла ошибка. Попробуйте позже.");
             }
@@ -66,6 +92,29 @@ export function ReviewForm({ onSuccess }: ReviewFormProps) {
             setIsSubmitting(false);
         }
     };
+
+    if (isChecking) {
+        return (
+            <div className="glass rounded-2xl p-8 border border-white/10 text-center">
+                <Loader2 className="w-8 h-8 animate-spin text-gray-400 mx-auto" />
+                <p className="text-gray-400 mt-3">Проверка возможности оставить отзыв...</p>
+            </div>
+        );
+    }
+
+    if (canReview === false) {
+        return (
+            <div className="glass rounded-2xl p-8 border border-yellow-500/20 text-center">
+                <div className="w-16 h-16 bg-yellow-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Lock className="w-8 h-8 text-yellow-500" />
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">Недоступно</h3>
+                <p className="text-gray-400">
+                    {cannotReviewReason || "Вы не можете оставить отзыв"}
+                </p>
+            </div>
+        );
+    }
 
     if (success) {
         return (
@@ -140,11 +189,15 @@ export function ReviewForm({ onSuccess }: ReviewFormProps) {
             <div className="mb-6">
                 <textarea
                     value={comment}
-                    onChange={(e) => setComment(e.target.value)}
+                    onChange={(e) => setComment(e.target.value.slice(0, 1000))}
                     placeholder="Расскажите о вашем опыте использования сервиса..."
                     rows={4}
+                    maxLength={1000}
                     className="w-full px-4 py-3 bg-black/30 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-white/30 transition-colors resize-none"
                 />
+                <p className="text-right text-xs text-gray-500 mt-1">
+                    {comment.length}/1000 символов
+                </p>
             </div>
 
             {/* Submit button */}

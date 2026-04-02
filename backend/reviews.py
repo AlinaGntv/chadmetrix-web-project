@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from database import get_db
-from models.models import User, Review, Promocode, PromocodeUsage
+from models.models import User, Review, Promocode, PromocodeUsage, Payment
 from auth import get_current_user
 from pydantic import BaseModel
 from typing import Optional, List
@@ -26,6 +26,7 @@ class ReviewResponse(BaseModel):
     rating: int
     comment: Optional[str]
     created_at: datetime
+    is_long: Optional[bool] = None  # Флаг, что комментарий длинный
 
 class ReviewStats(BaseModel):
     average_rating: float
@@ -38,7 +39,7 @@ async def create_review(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Создать отзыв (только один раз за все время)"""
+    """Создать отзыв (только для пользователей, которые совершали покупки)"""
     
     # Проверяем, не оставлял ли пользователь уже отзыв
     existing_review = db.query(Review).filter(
@@ -49,9 +50,23 @@ async def create_review(
     if existing_review:
         raise HTTPException(400, "You have already left a review")
     
+    # Проверяем, совершал ли пользователь хотя бы одну успешную покупку
+    has_purchased = db.query(Payment).filter(
+        Payment.user_id == current_user.id,
+        Payment.status == "succeeded"
+    ).first()
+    
+    if not has_purchased:
+        raise HTTPException(403, "Только пользователи, совершившие покупку, могут оставлять отзывы")
+    
     # Проверяем валидность рейтинга
     if review_data.rating < 1 or review_data.rating > 5:
         raise HTTPException(400, "Rating must be between 1 and 5")
+    
+    # Ограничение длины комментария (максимум 1000 символов)
+    MAX_COMMENT_LENGTH = 1000
+    if review_data.comment and len(review_data.comment) > MAX_COMMENT_LENGTH:
+        raise HTTPException(400, f"Comment must not exceed {MAX_COMMENT_LENGTH} characters")
     
     # Создаем отзыв
     review = Review(
@@ -65,6 +80,9 @@ async def create_review(
     
     # Отмечаем, что пользователь оставил отзыв
     current_user.review_given_at = datetime.utcnow()
+    
+    # Инициализируем переменную promocode_code
+    promocode_code = None
     
     # Если у пользователя еще нет скидки - даем промокод на 20%
     if not current_user.can_use_discount and not current_user.has_used_discount:
@@ -84,7 +102,7 @@ async def create_review(
                 description=f"Скидка 20% за отзыв для пользователя {current_user.id}",
                 active=True,
                 max_uses=1,
-                expires_at=datetime.utcnow() + timedelta(days=365)  # Скидка действительна год
+                expires_at=datetime.utcnow() + timedelta(days=365)
             )
             db.add(promocode)
             current_user.can_use_discount = True
@@ -153,6 +171,33 @@ async def get_review_stats(db: Session = Depends(get_db)):
         "rating_distribution": distribution
     }
 
+@router.get("/can-review")
+async def can_user_review(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Проверить, может ли пользователь оставить отзыв"""
+    
+    # Проверяем, оставлял ли уже отзыв
+    existing_review = db.query(Review).filter(
+        Review.user_id == current_user.id,
+        Review.is_deleted == False
+    ).first()
+    
+    if existing_review:
+        return {"can_review": False, "reason": "Вы уже оставили отзыв"}
+    
+    # Проверяем, совершал ли покупки
+    has_purchased = db.query(Payment).filter(
+        Payment.user_id == current_user.id,
+        Payment.status == "succeeded"
+    ).first()
+    
+    if not has_purchased:
+        return {"can_review": False, "reason": "Только пользователи, совершившие покупку, могут оставлять отзывы"}
+    
+    return {"can_review": True}
+
 @router.get("/my-review")
 async def get_my_review(
     current_user: User = Depends(get_current_user),
@@ -168,6 +213,13 @@ async def get_my_review(
     if not review:
         return {"has_review": False}
     
+    # Также ищем промокод пользователя
+    promocode = db.query(Promocode).filter(
+        Promocode.code.like(f"REVIEW20_{current_user.id[:8]}%"),
+        Promocode.active == True,
+        Promocode.expires_at > datetime.utcnow()
+    ).first()
+    
     return {
         "has_review": True,
         "id": review.id,
@@ -175,7 +227,8 @@ async def get_my_review(
         "comment": review.comment,
         "created_at": review.created_at,
         "has_discount": current_user.can_use_discount,
-        "used_discount": current_user.has_used_discount
+        "used_discount": current_user.has_used_discount,
+        "discount_code": promocode.code if promocode else None
     }
 
 @router.post("/apply-discount")

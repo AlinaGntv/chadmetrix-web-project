@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Star, MessageCircle, User as UserIcon, Trash2, Loader2 } from "lucide-react";
+import { Star, MessageCircle, User as UserIcon, Trash2, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import Image from "next/image";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -21,6 +21,46 @@ interface ReviewStats {
     average_rating: number;
     total_reviews: number;
     rating_distribution: Record<number, number>;
+}
+
+// Компонент для отображения комментария с возможностью разворачивания
+function ExpandableComment({ comment }: { comment: string }) {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const MAX_LENGTH = 150; // Максимальная длина до обрезания
+
+    const needsExpansion = comment.length > MAX_LENGTH;
+    const displayText = isExpanded ? comment : comment.slice(0, MAX_LENGTH);
+    const truncatedText = needsExpansion && !isExpanded && comment.length > MAX_LENGTH
+        ? displayText + "..."
+        : displayText;
+
+    if (!needsExpansion) {
+        return <p className="text-gray-300 text-sm leading-relaxed">{comment}</p>;
+    }
+
+    return (
+        <div>
+            <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
+                {truncatedText}
+            </p>
+            <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="mt-2 text-xs text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1"
+            >
+                {isExpanded ? (
+                    <>
+                        <ChevronUp className="w-3 h-3" />
+                        Свернуть
+                    </>
+                ) : (
+                    <>
+                        <ChevronDown className="w-3 h-3" />
+                        Читать полностью ({comment.length} симв.)
+                    </>
+                )}
+            </button>
+        </div>
+    );
 }
 
 // Компонент кнопки удаления для админа
@@ -199,7 +239,7 @@ export function ReviewsSection() {
                         </div>
 
                         {/* Rating */}
-                        <div className="flex gap-0.5 mb-2">
+                        <div className="flex gap-0.5 mb-3">
                             {[1, 2, 3, 4, 5].map((star) => (
                                 <Star
                                     key={star}
@@ -211,11 +251,9 @@ export function ReviewsSection() {
                             ))}
                         </div>
 
-                        {/* Comment */}
+                        {/* Comment with expand/collapse */}
                         {review.comment && (
-                            <p className="text-gray-300 text-sm leading-relaxed line-clamp-3">
-                                {review.comment}
-                            </p>
+                            <ExpandableComment comment={review.comment} />
                         )}
                     </div>
                 ))}
