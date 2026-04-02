@@ -21,7 +21,8 @@ export function UploadForm() {
 
     // === ИСПРАВЛЕННАЯ ЛОГИКА: учитываем и обычные, и бонусные использования ===
     const regularUses = user?.photo_uses_remaining || 0;
-    const totalUses = regularUses;
+    const bonusUses = user?.bonus_uses_remaining || 0;
+    const totalUses = regularUses + bonusUses;
     const hasRemainingUses = totalUses > 0;
 
     const canUseSidePhoto =
@@ -166,6 +167,11 @@ export function UploadForm() {
                 <AlertCircle className="w-4 h-4 text-gray-400" />
                 <span className="text-gray-400">
                     Осталось анализов: <span className="text-white font-semibold">{totalUses}</span>
+                    {bonusUses > 0 && (
+                        <span className="text-green-400 ml-1">
+                            (включая {bonusUses} бонусных)
+                        </span>
+                    )}
                 </span>
             </div>
 

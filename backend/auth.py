@@ -291,7 +291,11 @@ async def callback_google(
 
 @router.get("/me")
 async def get_me(current_user: User = Depends(get_current_user)):
-    """Получить информацию о текущем пользователе"""
+    total_uses = (
+        (current_user.photo_uses_remaining or 0) +
+        (current_user.bonus_uses_remaining or 0)
+    )
+
     return {
         "id": current_user.id,
         "email": current_user.email,
@@ -299,9 +303,12 @@ async def get_me(current_user: User = Depends(get_current_user)):
         "avatar_url": current_user.avatar_url,
         "tariff_type": current_user.tariff_type,
         "tariff_expire": current_user.tariff_expire.isoformat() if current_user.tariff_expire else None,
+
+        # 🔥 ГЛАВНОЕ
         "photo_uses_remaining": current_user.photo_uses_remaining,
-        "bonus_uses_remaining": current_user.bonus_uses_remaining,  # ← ДОБАВИТЬ ЭТО
-        # Для автоплатежей
+        "bonus_uses_remaining": current_user.bonus_uses_remaining,
+        "total_uses_remaining": total_uses,
+
         "payment_method_id": current_user.payment_method_id,
         "auto_payment_enabled": current_user.auto_payment_enabled,
         "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
