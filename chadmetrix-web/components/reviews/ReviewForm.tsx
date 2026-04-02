@@ -76,8 +76,10 @@ export function ReviewForm({ onSuccess }: ReviewFormProps) {
 
             await refreshUser();
 
+            // НЕ вызываем onSuccess автоматически
+            // Если передан колбэк, вызываем его (но без перезагрузки страницы)
             if (onSuccess) {
-                setTimeout(() => onSuccess(), 2000);
+                onSuccess();
             }
         } catch (err: unknown) {
             const error = err as ApiError;

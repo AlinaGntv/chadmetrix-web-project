@@ -229,11 +229,10 @@ async def get_my_review(
     if not review:
         return {"has_review": False}
     
-    # Также ищем промокод пользователя
+    # Ищем промокод пользователя
     promocode = db.query(Promocode).filter(
         Promocode.code.like(f"REVIEW20_{current_user.id[:8]}%"),
-        Promocode.active == True,
-        Promocode.expires_at > datetime.utcnow()
+        Promocode.active == True
     ).first()
     
     return {
