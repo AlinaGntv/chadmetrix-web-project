@@ -300,6 +300,7 @@ async def get_me(current_user: User = Depends(get_current_user)):
         "tariff_type": current_user.tariff_type,
         "tariff_expire": current_user.tariff_expire.isoformat() if current_user.tariff_expire else None,
         "photo_uses_remaining": current_user.photo_uses_remaining,
+        "bonus_uses_remaining": current_user.bonus_uses_remaining,  # ← ДОБАВИТЬ ЭТО
         # Для автоплатежей
         "payment_method_id": current_user.payment_method_id,
         "auto_payment_enabled": current_user.auto_payment_enabled,
