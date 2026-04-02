@@ -29,7 +29,10 @@ export function UploadForm() {
     const bonusUses = user?.bonus_uses_remaining ?? 0;
     const hasRemainingUses = totalUses > 0;
 
-    const canUseSidePhoto = user?.tariff_type === "htn" ||
+    // Разблокируем профиль для всех, у кого есть анализы (включая бонусные)
+    // Или для подписок HTN/CHAD
+    const canUseSidePhoto = hasRemainingUses ||
+        user?.tariff_type === "htn" ||
         user?.tariff_type === "chad" ||
         user?.tariff_type === "HTN" ||
         user?.tariff_type === "CHAD";
@@ -57,8 +60,8 @@ export function UploadForm() {
 
     // Функция для проверки статуса анализа и получения report_id
     const waitForReport = async (analysisId: string): Promise<string | null> => {
-        const maxAttempts = 30; // 30 секунд максимум
-        const delay = 1000; // 1 секунда между попытками
+        const maxAttempts = 30;
+        const delay = 1000;
 
         for (let i = 0; i < maxAttempts; i++) {
             try {
@@ -115,7 +118,6 @@ export function UploadForm() {
 
             if (res.status === 403) {
                 alert("У вас закончились анализы. Приобретите тариф для продолжения.");
-                // Обновляем данные пользователя, чтобы обновить счетчик
                 await refreshUser();
                 return;
             }
@@ -128,17 +130,13 @@ export function UploadForm() {
             const data = await res.json();
             const analysisId = data.analysis_id;
 
-            // Обновляем данные пользователя после успешного создания анализа
-            // (бонусы могли быть списаны)
             await refreshUser();
 
-            // Ждём завершения анализа и получаем report_id
             const reportId = await waitForReport(analysisId);
 
             if (reportId) {
                 router.push(`/reports/${reportId}`);
             } else {
-                // Если не дождались, редиректим на список отчётов
                 router.push("/reports");
             }
 
@@ -160,7 +158,6 @@ export function UploadForm() {
         }
     };
 
-    // Показываем индикатор загрузки при загрузке данных пользователя
     if (isAuthLoading) {
         return (
             <div className="flex justify-center items-center py-12">
@@ -190,10 +187,9 @@ export function UploadForm() {
                 onChange={handleChange("side")}
                 onClear={() => clear("side")}
                 locked={!canUseSidePhoto}
-                lockMessage="Доступно в подписке HTN/CHAD"
+                lockMessage={!hasRemainingUses ? "Сначала купите анализ" : "Загрузите фото анфас"}
             />
 
-            {/* Блок счётчика - используем total_uses_remaining */}
             <div className="flex items-center justify-center gap-2 text-sm">
                 <AlertCircle className="w-4 h-4 text-gray-400" />
                 <span className="text-gray-400">

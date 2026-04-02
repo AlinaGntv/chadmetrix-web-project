@@ -51,12 +51,21 @@ async def create_review(
         raise HTTPException(400, "You have already left a review")
     
     # Проверяем, совершал ли пользователь хотя бы одну успешную покупку
+    # Ищем платежи со статусом succeeded ИЛИ у пользователя есть использованные анализы
     has_purchased = db.query(Payment).filter(
         Payment.user_id == current_user.id,
         Payment.status == "succeeded"
     ).first()
     
-    if not has_purchased:
+    # Также проверяем, были ли у пользователя когда-либо анализы (photo_uses_remaining или bonus_uses_remaining когда-то были >0)
+    # Для этого проверяем, есть ли у пользователя записи в analyses
+    from models.models import Analysis
+    has_analysis = db.query(Analysis).filter(
+        Analysis.user_id == current_user.id,
+        Analysis.is_deleted == False
+    ).first()
+    
+    if not has_purchased and not has_analysis:
         raise HTTPException(403, "Только пользователи, совершившие покупку, могут оставлять отзывы")
     
     # Проверяем валидность рейтинга
@@ -187,14 +196,21 @@ async def can_user_review(
     if existing_review:
         return {"can_review": False, "reason": "Вы уже оставили отзыв"}
     
-    # Проверяем, совершал ли покупки
+    # Проверяем, совершал ли покупки ИЛИ делал ли анализы
+    from models.models import Analysis
+    
     has_purchased = db.query(Payment).filter(
         Payment.user_id == current_user.id,
         Payment.status == "succeeded"
     ).first()
     
-    if not has_purchased:
-        return {"can_review": False, "reason": "Только пользователи, совершившие покупку, могут оставлять отзывы"}
+    has_analysis = db.query(Analysis).filter(
+        Analysis.user_id == current_user.id,
+        Analysis.is_deleted == False
+    ).first()
+    
+    if not has_purchased and not has_analysis:
+        return {"can_review": False, "reason": "Только пользователи, совершившие покупку или анализ, могут оставлять отзывы"}
     
     return {"can_review": True}
 
