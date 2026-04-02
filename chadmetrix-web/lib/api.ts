@@ -1,8 +1,25 @@
 // lib/api.ts
 import axios from "axios";
 
+// === ТИПЫ ===
+export interface User {
+    id: string;
+    email?: string;
+    full_name?: string;
+    avatar_url?: string;
+    auth_provider?: string;
+    tariff_type: string;
+    tariff_expire?: string;
+    photo_uses_remaining: number;
+    bonus_uses_remaining: number;  // Добавлено поле для бонусов
+    payment_method_id?: string;
+    auto_payment_enabled?: boolean;
+    created_at?: string;
+    updated_at?: string;
+}
+
 export const api = axios.create({
-    baseURL: "/api",  // ← оставляем /api
+    baseURL: "/api",
     headers: {
         "Content-Type": "application/json",
     },
@@ -33,40 +50,40 @@ api.interceptors.response.use(
 );
 
 // AUTH
-export async function getCurrentUser() {
-    const response = await api.get("/auth/me");  // ← было /api/auth/me, теперь /auth/me
+export async function getCurrentUser(): Promise<User> {
+    const response = await api.get("/auth/me");
     return response.data;
 }
 
 export async function logout() {
-    const response = await api.post("/auth/logout");  // ← было /api/auth/logout, теперь /auth/logout
+    const response = await api.post("/auth/logout");
     return response.data;
 }
 
 // PAYMENTS
 export async function createOnetimePayment(tariffId: number) {
-    const response = await api.post(`/payments/create-onetime?tariff_id=${tariffId}`);  // ← убрали /api
+    const response = await api.post(`/payments/create-onetime?tariff_id=${tariffId}`);
     return response.data;
 }
 
 export async function createPaymentWithBinding(tariffId: number) {
-    const response = await api.post(`/payments/create-with-binding?tariff_id=${tariffId}`);  // ← убрали /api
+    const response = await api.post(`/payments/create-with-binding?tariff_id=${tariffId}`);
     return response.data;
 }
 
 export async function getPaymentMethod() {
-    const response = await api.get("/payments/payment-method");  // ← убрали /api
+    const response = await api.get("/payments/payment-method");
     return response.data;
 }
 
 export async function removePaymentMethod() {
-    const response = await api.delete("/payments/payment-method");  // ← убрали /api
+    const response = await api.delete("/payments/payment-method");
     return response.data;
 }
 
 // ANALYSIS
 export async function createAnalysis(formData: FormData) {
-    const response = await api.post("/analysis", formData, {  // ← убрали /api
+    const response = await api.post("/analysis", formData, {
         headers: {
             "Content-Type": "multipart/form-data",
         },
@@ -75,28 +92,28 @@ export async function createAnalysis(formData: FormData) {
 }
 
 export async function getAnalysis(analysisId: string) {
-    const response = await api.get(`/analysis/${analysisId}`);  // ← убрали /api
+    const response = await api.get(`/analysis/${analysisId}`);
     return response.data;
 }
 
 export async function getAnalysisStatus(analysisId: string) {
-    const response = await api.get(`/analysis/${analysisId}/status`);  // ← убрали /api
+    const response = await api.get(`/analysis/${analysisId}/status`);
     return response.data;
 }
 
 // REPORTS
 export async function getReports() {
-    const response = await api.get("/reports");  // ← убрали /api
+    const response = await api.get("/reports");
     return response.data;
 }
 
 export async function getReport(id: string) {
-    const response = await api.get(`/reports/${id}`);  // ← убрали /api
+    const response = await api.get(`/reports/${id}`);
     return response.data;
 }
 
 // REFERRALS
 export async function getReferralStats() {
-    const response = await api.get("/referrals/stats");  // ← убрали /api
+    const response = await api.get("/referrals/stats");
     return response.data;
 }

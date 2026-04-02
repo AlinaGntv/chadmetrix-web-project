@@ -4,16 +4,18 @@
 import { useState, useEffect } from "react";
 import { api, getCurrentUser } from "@/lib/api";
 
+// Используем тот же тип что и в api.ts или делаем поля необязательными
 interface User {
     id: string;
-    email: string;
-    full_name: string;
-    avatar_url: string;
+    email?: string;                    // ← сделать необязательным
+    full_name?: string;                // ← сделать необязательным
+    avatar_url?: string;               // ← сделать необязательным
     tariff_type: string;
-    tariff_expire?: string;           // ← ДОБАВИТЬ
+    tariff_expire?: string;
     photo_uses_remaining: number;
-    payment_method_id?: string;       // ← ДОБАВИТЬ (для автоплатежей)
-    auto_payment_enabled?: boolean;   // ← ДОБАВИТЬ (для автоплатежей)
+    bonus_uses_remaining: number;    // ← ДОБАВИТЬ
+    payment_method_id?: string;
+    auto_payment_enabled?: boolean;
 }
 
 export function useAuth() {
@@ -27,7 +29,11 @@ export function useAuth() {
     const checkAuth = async () => {
         try {
             const userData = await getCurrentUser();
-            setUser(userData);
+            // Приводим тип с дефолтным значением для бонусов
+            setUser({
+                ...userData,
+                bonus_uses_remaining: userData.bonus_uses_remaining || 0
+            });
         } catch {
             setUser(null);
         } finally {
@@ -59,6 +65,6 @@ export function useAuth() {
         isAuthenticated: !!user,
         loginWithGoogle,
         logout,
-        refreshUser: checkAuth  // ← Уже есть, отлично
+        refreshUser: checkAuth
     };
 }

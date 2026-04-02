@@ -107,15 +107,12 @@ async def create_analysis(
         raise HTTPException(400, "photo_front is required")
 
     # === ПРОВЕРКА БОНУСОВ И ЛИМИТОВ ===
-    has_bonus = current_user.bonus_uses_remaining > 0
-    has_regular = current_user.photo_uses_remaining > 0
+    total_available = (current_user.photo_uses_remaining or 0) + (current_user.bonus_uses_remaining or 0)
     
-    if not has_bonus and not has_regular:
+    if total_available <= 0:
         raise HTTPException(403, "No photo analyses remaining. Please upgrade your plan.")
     
-    # Если есть бонус, но нет обычных использований — запрещаем фото профиля
-    if has_bonus and not has_regular and photo_side:
-        raise HTTPException(403, "Bonus analysis allows only front photo. Please upgrade for side profile.")
+    # Бонус теперь работает как обычный анализ (и анфас, и профиль) - без ограничений
 
     # Сохраняем фото (с автоматическим сжатием)
     try:
@@ -159,14 +156,13 @@ async def create_analysis(
         db.add(photo2)
 
     # === СПИСАНИЕ БОНУСА ИЛИ ОБЫЧНОГО ЛИМИТА ===
-    if has_bonus:
-        # Используем бонус первым
+    # Используем бонус первым (если есть), иначе обычный лимит
+    if current_user.bonus_uses_remaining > 0:
         current_user.bonus_uses_remaining -= 1
-        logger.info(f"[UPLOAD] Used bonus use for user {current_user.id}. Remaining: {current_user.bonus_uses_remaining}")
-    elif has_regular:
-        # Используем обычный лимит
+        logger.info(f"[UPLOAD] Used bonus use for user {current_user.id}. Remaining bonus: {current_user.bonus_uses_remaining}")
+    elif current_user.photo_uses_remaining > 0:
         current_user.photo_uses_remaining -= 1
-        logger.info(f"[UPLOAD] Used regular use for user {current_user.id}. Remaining: {current_user.photo_uses_remaining}")
+        logger.info(f"[UPLOAD] Used regular use for user {current_user.id}. Remaining regular: {current_user.photo_uses_remaining}")
 
     db.commit()
 

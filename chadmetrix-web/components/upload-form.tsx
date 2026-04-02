@@ -19,7 +19,11 @@ export function UploadForm() {
     const [sidePreview, setSidePreview] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
 
-    const hasRemainingUses = (user?.photo_uses_remaining || 0) > 0;
+    // === ИСПРАВЛЕННАЯ ЛОГИКА: учитываем и обычные, и бонусные использования ===
+    const regularUses = user?.photo_uses_remaining || 0;
+    const totalUses = regularUses;
+    const hasRemainingUses = totalUses > 0;
+
     const canUseSidePhoto =
         user?.tariff_type === "htn" ||
         user?.tariff_type === "chad" ||
@@ -157,9 +161,12 @@ export function UploadForm() {
                 lockMessage="Доступно в подписке HTN/CHAD"
             />
 
-            <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
-                <AlertCircle className="w-4 h-4" />
-                Осталось анализов: {user?.photo_uses_remaining || 0}
+            {/* === ИСПРАВЛЕННЫЙ БЛОК СЧЁТЧИКА === */}
+            <div className="flex items-center justify-center gap-2 text-sm">
+                <AlertCircle className="w-4 h-4 text-gray-400" />
+                <span className="text-gray-400">
+                    Осталось анализов: <span className="text-white font-semibold">{totalUses}</span>
+                </span>
             </div>
 
             <div className="flex flex-col items-center gap-3">
