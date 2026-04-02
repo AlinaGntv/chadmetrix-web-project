@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { useState, Suspense } from "react";
-import { Menu, X, LogOut } from "lucide-react";
+import { Menu, X, LogOut, User, CreditCard, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -55,6 +55,13 @@ export function Navbar() {
         logout,
     } = useAuth();
 
+    const isAdmin = user?.email === "gntv.surname@gmail.com";
+    const userName = user?.full_name
+        ? user.full_name
+        : user?.email
+            ? user.email.split("@")[0]
+            : "User";
+
     return (
         <nav className="fixed top-0 w-full z-50 glass border-b border-white/10">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -62,7 +69,6 @@ export function Navbar() {
                 <div className="flex justify-between items-center h-16">
 
                     {/* LOGO */}
-
                     <Link
                         href="/"
                         className="flex items-center space-x-3 group"
@@ -76,7 +82,6 @@ export function Navbar() {
                                 priority
                             />
                         </div>
-
                         <span className="text-xl font-bold tracking-tight">
                             <span className="text-white group-hover:text-gray-300 transition-colors">
                                 chad
@@ -87,139 +92,88 @@ export function Navbar() {
                         </span>
                     </Link>
 
-                    {/* NAV LINKS */}
-
+                    {/* DESKTOP NAV LINKS */}
                     <div className="hidden md:flex items-center space-x-8">
-
-                        <Link
-                            href="/"
-                            className="text-sm text-gray-300 hover:text-white transition-colors"
-                        >
+                        <Link href="/" className="text-sm text-gray-300 hover:text-white transition-colors">
                             Главная
                         </Link>
-
-                        <Link
-                            href="/analysis/new"
-                            className="text-sm text-gray-300 hover:text-white transition-colors"
-                        >
+                        <Link href="/analysis/new" className="text-sm text-gray-300 hover:text-white transition-colors">
                             Анализ
                         </Link>
-
-                        <Link
-                            href="/reports"
-                            className="text-sm text-gray-300 hover:text-white transition-colors"
-                        >
+                        <Link href="/reports" className="text-sm text-gray-300 hover:text-white transition-colors">
                             Отчёты
                         </Link>
-
-                        <Link
-                            href="/reviews"
-                            className="text-sm text-gray-300 hover:text-white transition-colors"
-                        >
+                        <Link href="/reviews" className="text-sm text-gray-300 hover:text-white transition-colors">
                             Отзывы
                         </Link>
-
-                        <Link
-                            href="/dashboard"
-                            className="text-sm text-gray-300 hover:text-white transition-colors"
-                        >
+                        <Link href="/dashboard" className="text-sm text-gray-300 hover:text-white transition-colors">
                             Кабинет
                         </Link>
-
                     </div>
 
-                    {/* RIGHT SIDE */}
-
+                    {/* DESKTOP RIGHT SIDE */}
                     <div className="hidden md:flex items-center space-x-4">
-
                         {isLoading ? (
-
                             <div className="w-8 h-8 rounded-full bg-gray-800 animate-pulse" />
-
                         ) : isAuthenticated ? (
-
                             <div className="flex items-center space-x-3">
-
                                 {/* USER NAME BOX */}
-
-                                <div
-                                    className="
-                                        px-3 py-1.5
-                                        rounded-lg
-                                        border border-white/15
-                                        bg-white/5
-                                        backdrop-blur
-                                        text-sm
-                                        text-white
-                                        max-w-40
-                                        truncate
-                                    "
-                                >
-                                    {user?.full_name
-                                        ? user.full_name
-                                        : user?.email
-                                            ? user.email.split("@")[0]
-                                            : "User"}
+                                <div className="px-3 py-1.5 rounded-lg border border-white/15 bg-white/5 backdrop-blur text-sm text-white max-w-40 truncate">
+                                    {userName}
                                 </div>
 
-                                <Link
-                                    href="/dashboard/subscription"
-                                    className="text-sm text-gray-300 hover:text-white transition-colors"
-                                >
+                                {isAdmin && (
+                                    <Link href="/admin" className="text-sm text-gray-300 hover:text-white transition-colors">
+                                        Админ
+                                    </Link>
+                                )}
+
+                                <Link href="/dashboard/subscription" className="text-sm text-gray-300 hover:text-white transition-colors">
                                     Подписка
                                 </Link>
 
-                                {/* LOGOUT */}
-
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={logout}
-                                    className="text-gray-300 hover:text-white"
-                                >
+                                <Button variant="ghost" size="sm" onClick={logout} className="text-gray-300 hover:text-white">
                                     <LogOut className="w-4 h-4 mr-2" />
                                     Выйти
                                 </Button>
-
                             </div>
-
                         ) : (
-
                             <Suspense fallback={<LoginButtonFallback />}>
                                 <LoginButton />
                             </Suspense>
-
                         )}
-
                     </div>
 
-                    {/* MOBILE BUTTON */}
-
-                    <button
-                        className="md:hidden p-2"
-                        onClick={() => setIsOpen(!isOpen)}
-                    >
-                        {isOpen ? (
-                            <X className="w-6 h-6" />
-                        ) : (
-                            <Menu className="w-6 h-6" />
-                        )}
+                    {/* MOBILE MENU BUTTON */}
+                    <button className="md:hidden p-2" onClick={() => setIsOpen(!isOpen)}>
+                        {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
                     </button>
-
                 </div>
             </div>
 
             {/* MOBILE MENU */}
-
             {isOpen && (
-
                 <div className="md:hidden glass border-t border-white/10">
+                    <div className="px-4 pt-2 pb-3 space-y-2">
+                        {/* Информация о пользователе в мобильной версии */}
+                        {isAuthenticated && (
+                            <div className="px-3 py-3 mb-2 rounded-xl bg-white/5 border border-white/10">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-linear-to-br from-gray-700 to-gray-900 flex items-center justify-center">
+                                        <User className="w-5 h-5 text-gray-400" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="text-white font-medium">{userName}</p>
+                                        <p className="text-xs text-gray-500">{user?.email}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
-                    <div className="px-4 pt-2 pb-3 space-y-1">
-
+                        {/* Навигационные ссылки */}
                         <Link
                             href="/"
-                            className="block px-3 py-2 text-base text-gray-300 hover:text-white"
+                            className="flex items-center gap-3 px-3 py-2 text-base text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
                             onClick={() => setIsOpen(false)}
                         >
                             Главная
@@ -227,7 +181,7 @@ export function Navbar() {
 
                         <Link
                             href="/analysis/new"
-                            className="block px-3 py-2 text-base text-gray-300 hover:text-white"
+                            className="flex items-center gap-3 px-3 py-2 text-base text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
                             onClick={() => setIsOpen(false)}
                         >
                             Анализ
@@ -235,7 +189,7 @@ export function Navbar() {
 
                         <Link
                             href="/reports"
-                            className="block px-3 py-2 text-base text-gray-300 hover:text-white"
+                            className="flex items-center gap-3 px-3 py-2 text-base text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
                             onClick={() => setIsOpen(false)}
                         >
                             Отчёты
@@ -243,7 +197,7 @@ export function Navbar() {
 
                         <Link
                             href="/reviews"
-                            className="block px-3 py-2 text-base text-gray-300 hover:text-white"
+                            className="flex items-center gap-3 px-3 py-2 text-base text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
                             onClick={() => setIsOpen(false)}
                         >
                             Отзывы
@@ -251,30 +205,63 @@ export function Navbar() {
 
                         <Link
                             href="/dashboard"
-                            className="block px-3 py-2 text-base text-gray-300 hover:text-white"
+                            className="flex items-center gap-3 px-3 py-2 text-base text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
                             onClick={() => setIsOpen(false)}
                         >
                             Кабинет
                         </Link>
 
-                        {!isAuthenticated && (
+                        {/* Ссылка на подписку для мобильной версии */}
+                        {isAuthenticated && (
+                            <Link
+                                href="/dashboard/subscription"
+                                className="flex items-center gap-3 px-3 py-2 text-base text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                                onClick={() => setIsOpen(false)}
+                            >
+                                <CreditCard className="w-5 h-5" />
+                                Подписка
+                            </Link>
+                        )}
 
+                        {/* Ссылка на админку для мобильной версии */}
+                        {isAdmin && (
+                            <Link
+                                href="/admin"
+                                className="flex items-center gap-3 px-3 py-2 text-base text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                                onClick={() => setIsOpen(false)}
+                            >
+                                <Shield className="w-5 h-5" />
+                                Админ-панель
+                            </Link>
+                        )}
+
+                        {/* Кнопка выхода для мобильной версии */}
+                        {isAuthenticated && (
+                            <button
+                                onClick={() => {
+                                    logout();
+                                    setIsOpen(false);
+                                }}
+                                className="flex items-center gap-3 w-full px-3 py-2 text-base text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
+                            >
+                                <LogOut className="w-5 h-5" />
+                                Выйти
+                            </button>
+                        )}
+
+                        {/* Кнопка входа для мобильной версии */}
+                        {!isAuthenticated && (
                             <Suspense fallback={
-                                <button className="block w-full text-left px-3 py-2 text-base text-white/50 font-medium" disabled>
+                                <button className="flex items-center gap-3 w-full px-3 py-2 text-base text-white/50 font-medium" disabled>
                                     Войти
                                 </button>
                             }>
                                 <MobileLoginButton />
                             </Suspense>
-
                         )}
-
                     </div>
-
                 </div>
-
             )}
-
         </nav>
     );
 }
@@ -292,7 +279,7 @@ function MobileLoginButton() {
     return (
         <button
             onClick={handleLogin}
-            className="block w-full text-left px-3 py-2 text-base text-white font-medium"
+            className="flex items-center gap-3 w-full px-3 py-2 text-base text-white font-medium hover:bg-white/5 rounded-lg transition-colors"
         >
             Войти
         </button>

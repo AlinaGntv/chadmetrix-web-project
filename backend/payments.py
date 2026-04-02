@@ -1,10 +1,14 @@
 # backend/payments.py
+from typing import Optional
 import uuid
 import base64
 import json
+
+from pydantic import BaseModel
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from database import get_db
 from models.models import Payment, User, Tariff, Referral, Promocode, PromocodeUsage
 from auth import get_current_user
@@ -528,4 +532,200 @@ async def validate_promocode(
         "valid": True,
         "discount_percent": promocode.discount_percent,
         "expires_at": promocode.expires_at.isoformat()
+    }
+
+# ========== АДМИН-ПАНЕЛЬ (УПРАВЛЕНИЕ ПРОМОКОДАМИ) ==========
+
+class PromocodeCreate(BaseModel):
+    code: str
+    discount_percent: int
+    description: Optional[str] = None
+    max_uses: Optional[int] = None
+    expires_days: Optional[int] = 30  # дней до истечения
+
+class PromocodeUpdate(BaseModel):
+    active: Optional[bool] = None
+    max_uses: Optional[int] = None
+    description: Optional[str] = None
+
+@router.post("/admin/promocodes")
+async def create_promocode_admin(
+    promocode_data: PromocodeCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Создать промокод (только для админов)"""
+    
+    # Проверка прав администратора
+    ADMIN_EMAILS = ["gntv.surname@gmail.com"]  # Замените на свой email
+    if current_user.email not in ADMIN_EMAILS:
+        raise HTTPException(403, "Доступ только для администраторов")
+    
+    # Проверяем, не существует ли уже такой промокод
+    existing = db.query(Promocode).filter(Promocode.code == promocode_data.code.upper()).first()
+    if existing:
+        raise HTTPException(400, "Промокод с таким названием уже существует")
+    
+    # Проверяем процент скидки
+    if promocode_data.discount_percent < 1 or promocode_data.discount_percent > 100:
+        raise HTTPException(400, "Скидка должна быть от 1 до 100 процентов")
+    
+    # Создаем промокод
+    promocode = Promocode(
+        id=str(uuid.uuid4()),
+        code=promocode_data.code.upper(),
+        discount_percent=promocode_data.discount_percent,
+        description=promocode_data.description,
+        active=True,
+        max_uses=promocode_data.max_uses,
+        expires_at=datetime.utcnow() + timedelta(days=promocode_data.expires_days),
+        uses_count=0
+    )
+    db.add(promocode)
+    db.commit()
+    db.refresh(promocode)
+    
+    logger.info(f"Admin {current_user.email} created promocode {promocode.code}")
+    
+    return {
+        "message": "Промокод создан",
+        "promocode": {
+            "id": promocode.id,
+            "code": promocode.code,
+            "discount_percent": promocode.discount_percent,
+            "description": promocode.description,
+            "active": promocode.active,
+            "max_uses": promocode.max_uses,
+            "uses_count": promocode.uses_count,
+            "expires_at": promocode.expires_at.isoformat() if promocode.expires_at else None
+        }
+    }
+
+@router.get("/admin/promocodes")
+async def get_all_promocodes_admin(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    active_only: bool = False,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0)
+):
+    """Получить все промокоды (только для админов)"""
+    
+    ADMIN_EMAILS = ["gntv.surname@gmail.com"]
+    if current_user.email not in ADMIN_EMAILS:
+        raise HTTPException(403, "Доступ только для администраторов")
+    
+    query = db.query(Promocode)
+    if active_only:
+        query = query.filter(Promocode.active == True)
+    
+    promocodes = query.order_by(Promocode.created_at.desc()).offset(offset).limit(limit).all()
+    
+    return {
+        "promocodes": [
+            {
+                "id": p.id,
+                "code": p.code,
+                "discount_percent": p.discount_percent,
+                "description": p.description,
+                "active": p.active,
+                "max_uses": p.max_uses,
+                "uses_count": p.uses_count,
+                "expires_at": p.expires_at.isoformat() if p.expires_at else None,
+                "created_at": p.created_at.isoformat() if p.created_at else None
+            }
+            for p in promocodes
+        ]
+    }
+
+@router.put("/admin/promocodes/{promocode_id}")
+async def update_promocode_admin(
+    promocode_id: str,
+    update_data: PromocodeUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Обновить промокод (только для админов)"""
+    
+    ADMIN_EMAILS = ["gntv.surname@gmail.com"]
+    if current_user.email not in ADMIN_EMAILS:
+        raise HTTPException(403, "Доступ только для администраторов")
+    
+    promocode = db.query(Promocode).filter(Promocode.id == promocode_id).first()
+    if not promocode:
+        raise HTTPException(404, "Промокод не найден")
+    
+    if update_data.active is not None:
+        promocode.active = update_data.active
+    if update_data.max_uses is not None:
+        promocode.max_uses = update_data.max_uses
+    if update_data.description is not None:
+        promocode.description = update_data.description
+    
+    db.commit()
+    
+    logger.info(f"Admin {current_user.email} updated promocode {promocode.code}")
+    
+    return {"message": "Промокод обновлён"}
+
+@router.delete("/admin/promocodes/{promocode_id}")
+async def delete_promocode_admin(
+    promocode_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Удалить промокод (только для админов) - мягкое удаление"""
+    
+    ADMIN_EMAILS = ["gntv.surname@gmail.com"]
+    if current_user.email not in ADMIN_EMAILS:
+        raise HTTPException(403, "Доступ только для администраторов")
+    
+    promocode = db.query(Promocode).filter(Promocode.id == promocode_id).first()
+    if not promocode:
+        raise HTTPException(404, "Промокод не найден")
+    
+    # Мягкое удаление - деактивируем
+    promocode.active = False
+    db.commit()
+    
+    logger.info(f"Admin {current_user.email} deleted promocode {promocode.code}")
+    
+    return {"message": "Промокод деактивирован"}
+
+@router.get("/admin/stats")
+async def get_admin_stats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Получить статистику для админ-панели"""
+    
+    ADMIN_EMAILS = ["gntv.surname@gmail.com"]
+    if current_user.email not in ADMIN_EMAILS:
+        raise HTTPException(403, "Доступ только для администраторов")
+    
+    from models.models import Review, User, Payment, Analysis
+    
+    total_users = db.query(User).filter(User.is_deleted == False).count()
+    total_reviews = db.query(Review).filter(Review.is_deleted == False).count()
+    total_payments = db.query(Payment).filter(Payment.status == "succeeded").count()
+    total_analyses = db.query(Analysis).filter(Analysis.is_deleted == False).count()
+    
+    # Сумма всех успешных платежей
+    total_revenue = db.query(Payment).filter(Payment.status == "succeeded").with_entities(
+        func.sum(Payment.amount)
+    ).scalar() or 0
+    
+    # Активные промокоды
+    active_promocodes = db.query(Promocode).filter(
+        Promocode.active == True,
+        Promocode.expires_at > datetime.utcnow()
+    ).count()
+    
+    return {
+        "total_users": total_users,
+        "total_reviews": total_reviews,
+        "total_payments": total_payments,
+        "total_analyses": total_analyses,
+        "total_revenue": float(total_revenue),
+        "active_promocodes": active_promocodes
     }
