@@ -1,19 +1,20 @@
 // lib/hooks/useAuth.ts
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { api, getCurrentUser } from "@/lib/api";
 
-// Используем тот же тип что и в api.ts или делаем поля необязательными
+// Обновленный интерфейс User, соответствующий API /api/auth/me
 interface User {
     id: string;
-    email?: string;                    // ← сделать необязательным
-    full_name?: string;                // ← сделать необязательным
-    avatar_url?: string;               // ← сделать необязательным
+    email?: string;
+    full_name?: string;
+    avatar_url?: string;
     tariff_type: string;
     tariff_expire?: string;
     photo_uses_remaining: number;
-    bonus_uses_remaining: number;    // ← ДОБАВИТЬ
+    bonus_uses_remaining: number;
+    total_uses_remaining: number;  // ← ДОБАВИТЬ агрегированное поле
     payment_method_id?: string;
     auto_payment_enabled?: boolean;
 }
@@ -22,24 +23,33 @@ export function useAuth() {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    useEffect(() => {
-        checkAuth();
-    }, []);
-
-    const checkAuth = async () => {
+    const checkAuth = useCallback(async () => {
         try {
             const userData = await getCurrentUser();
-            // Приводим тип с дефолтным значением для бонусов
+            // Приводим тип с дефолтными значениями
             setUser({
-                ...userData,
-                bonus_uses_remaining: userData.bonus_uses_remaining || 0
+                id: userData.id,
+                email: userData.email,
+                full_name: userData.full_name,
+                avatar_url: userData.avatar_url,
+                tariff_type: userData.tariff_type,
+                tariff_expire: userData.tariff_expire,
+                photo_uses_remaining: userData.photo_uses_remaining || 0,
+                bonus_uses_remaining: userData.bonus_uses_remaining || 0,
+                total_uses_remaining: userData.total_uses_remaining ?? (userData.photo_uses_remaining + userData.bonus_uses_remaining), // fallback на всякий случай
+                payment_method_id: userData.payment_method_id,
+                auto_payment_enabled: userData.auto_payment_enabled,
             });
         } catch {
             setUser(null);
         } finally {
             setIsLoading(false);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        checkAuth();
+    }, [checkAuth]);
 
     const loginWithGoogle = (refCode?: string) => {
         const url = refCode
@@ -59,12 +69,17 @@ export function useAuth() {
         }
     };
 
+    const refreshUser = useCallback(async () => {
+        setIsLoading(true);
+        await checkAuth();
+    }, [checkAuth]);
+
     return {
         user,
         isLoading,
         isAuthenticated: !!user,
         loginWithGoogle,
         logout,
-        refreshUser: checkAuth
+        refreshUser,
     };
 }

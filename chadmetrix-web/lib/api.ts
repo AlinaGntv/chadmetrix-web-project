@@ -11,7 +11,8 @@ export interface User {
     tariff_type: string;
     tariff_expire?: string;
     photo_uses_remaining: number;
-    bonus_uses_remaining: number;  // Добавлено поле для бонусов
+    bonus_uses_remaining: number;
+    total_uses_remaining: number;  // ← ДОБАВИТЬ это поле
     payment_method_id?: string;
     auto_payment_enabled?: boolean;
     created_at?: string;

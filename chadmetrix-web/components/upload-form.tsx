@@ -1,7 +1,7 @@
 // components/upload-form.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Upload, X, Loader2, Lock, AlertCircle } from "lucide-react";
@@ -11,22 +11,25 @@ import Link from "next/link";
 
 export function UploadForm() {
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, refreshUser, isLoading: isAuthLoading } = useAuth();
 
     const [front, setFront] = useState<File | null>(null);
     const [side, setSide] = useState<File | null>(null);
     const [frontPreview, setFrontPreview] = useState<string | null>(null);
     const [sidePreview, setSidePreview] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
 
-    // === ИСПРАВЛЕННАЯ ЛОГИКА: учитываем и обычные, и бонусные использования ===
-    const regularUses = user?.photo_uses_remaining || 0;
-    const bonusUses = user?.bonus_uses_remaining || 0;
-    const totalUses = regularUses + bonusUses;
+    // Обновляем данные пользователя при монтировании компонента
+    useEffect(() => {
+        refreshUser();
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Используем total_uses_remaining из API (агрегированное поле)
+    const totalUses = user?.total_uses_remaining ?? 0;
+    const bonusUses = user?.bonus_uses_remaining ?? 0;
     const hasRemainingUses = totalUses > 0;
 
-    const canUseSidePhoto =
-        user?.tariff_type === "htn" ||
+    const canUseSidePhoto = user?.tariff_type === "htn" ||
         user?.tariff_type === "chad" ||
         user?.tariff_type === "HTN" ||
         user?.tariff_type === "CHAD";
@@ -55,34 +58,47 @@ export function UploadForm() {
     // Функция для проверки статуса анализа и получения report_id
     const waitForReport = async (analysisId: string): Promise<string | null> => {
         const maxAttempts = 30; // 30 секунд максимум
+        const delay = 1000; // 1 секунда между попытками
+
         for (let i = 0; i < maxAttempts; i++) {
             try {
                 const res = await fetch(`/api/analysis/${analysisId}/status`, {
                     credentials: "include",
                 });
-                if (!res.ok) continue;
+
+                if (!res.ok) {
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    continue;
+                }
 
                 const data = await res.json();
+
                 if (data.has_report && data.report_id) {
                     return data.report_id;
+                }
+
+                if (data.status === "failed") {
+                    console.error("Analysis failed");
+                    return null;
                 }
             } catch (e) {
                 console.error("Status check failed:", e);
             }
-            // Ждём 1 секунду перед следующей проверкой
-            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            await new Promise(resolve => setTimeout(resolve, delay));
         }
         return null;
     };
 
     const handleSubmit = async () => {
         if (!front) return;
+
         if (!hasRemainingUses) {
             alert("У вас закончились анализы. Приобретите тариф для продолжения.");
             return;
         }
 
-        setIsLoading(true);
+        setIsUploading(true);
 
         try {
             const formData = new FormData();
@@ -99,15 +115,22 @@ export function UploadForm() {
 
             if (res.status === 403) {
                 alert("У вас закончились анализы. Приобретите тариф для продолжения.");
+                // Обновляем данные пользователя, чтобы обновить счетчик
+                await refreshUser();
                 return;
             }
 
             if (!res.ok) {
-                throw new Error("Upload failed");
+                const errorData = await res.json().catch(() => ({}));
+                throw new Error(errorData.detail || "Upload failed");
             }
 
             const data = await res.json();
             const analysisId = data.analysis_id;
+
+            // Обновляем данные пользователя после успешного создания анализа
+            // (бонусы могли быть списаны)
+            await refreshUser();
 
             // Ждём завершения анализа и получаем report_id
             const reportId = await waitForReport(analysisId);
@@ -121,9 +144,9 @@ export function UploadForm() {
 
         } catch (e) {
             console.error(e);
-            alert("Ошибка загрузки");
+            alert(e instanceof Error ? e.message : "Ошибка загрузки");
         } finally {
-            setIsLoading(false);
+            setIsUploading(false);
         }
     };
 
@@ -137,9 +160,17 @@ export function UploadForm() {
         }
     };
 
+    // Показываем индикатор загрузки при загрузке данных пользователя
+    if (isAuthLoading) {
+        return (
+            <div className="flex justify-center items-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-white" />
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-6">
-
             <PhotoSlot
                 title="Фото анфас"
                 preview={frontPreview}
@@ -162,36 +193,33 @@ export function UploadForm() {
                 lockMessage="Доступно в подписке HTN/CHAD"
             />
 
-            {/* === ИСПРАВЛЕННЫЙ БЛОК СЧЁТЧИКА === */}
+            {/* Блок счётчика - используем total_uses_remaining */}
             <div className="flex items-center justify-center gap-2 text-sm">
                 <AlertCircle className="w-4 h-4 text-gray-400" />
                 <span className="text-gray-400">
                     Осталось анализов: <span className="text-white font-semibold">{totalUses}</span>
                     {bonusUses > 0 && (
                         <span className="text-green-400 ml-1">
-                            (включая {bonusUses} бонусных)
+                            (+{bonusUses} бонусных)
                         </span>
                     )}
                 </span>
             </div>
 
             <div className="flex flex-col items-center gap-3">
-
                 {!hasRemainingUses ? (
                     <Link href="/dashboard/subscription">
-                        <Button
-                            className="bg-white text-black hover:bg-gray-200"
-                        >
+                        <Button className="bg-white text-black hover:bg-gray-200">
                             Купить анализ
                         </Button>
                     </Link>
                 ) : (
                     <Button
                         onClick={handleSubmit}
-                        disabled={!front || isLoading}
+                        disabled={!front || isUploading}
                         className="bg-white text-black hover:bg-gray-200"
                     >
-                        {isLoading ? (
+                        {isUploading ? (
                             <>
                                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                                 Анализируем...
@@ -201,20 +229,18 @@ export function UploadForm() {
                         )}
                     </Button>
                 )}
-
             </div>
-
         </div>
     );
 }
 
 interface PhotoSlotProps {
-    title: string
-    preview: string | null
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-    onClear: () => void
-    locked?: boolean
-    lockMessage?: string
+    title: string;
+    preview: string | null;
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    onClear: () => void;
+    locked?: boolean;
+    lockMessage?: string;
 }
 
 function PhotoSlot({
@@ -227,7 +253,6 @@ function PhotoSlot({
 }: PhotoSlotProps) {
     return (
         <div className={`glass rounded-2xl p-6 border border-white/10 ${locked ? 'opacity-60' : ''}`}>
-
             <h3 className="text-white mb-3">{title}</h3>
 
             {locked && (
@@ -239,7 +264,6 @@ function PhotoSlot({
 
             {!preview ? (
                 <div className="relative border border-dashed border-gray-600 rounded-xl p-8 text-center">
-
                     <input
                         type="file"
                         accept="image/*"
@@ -253,11 +277,9 @@ function PhotoSlot({
                     <p className={`text-sm ${locked ? 'text-gray-500' : 'text-gray-400'}`}>
                         {locked ? "Заблокировано" : "Нажмите или перетащите фото"}
                     </p>
-
                 </div>
             ) : (
                 <div className="relative aspect-square max-w-sm rounded-xl overflow-hidden">
-
                     <Image
                         src={preview}
                         alt="preview"
@@ -267,11 +289,10 @@ function PhotoSlot({
 
                     <button
                         onClick={onClear}
-                        className="absolute top-2 right-2 bg-black/50 p-2 rounded-full"
+                        className="absolute top-2 right-2 bg-black/50 p-2 rounded-full hover:bg-black/70 transition-colors"
                     >
                         <X className="w-4 h-4" />
                     </button>
-
                 </div>
             )}
         </div>
