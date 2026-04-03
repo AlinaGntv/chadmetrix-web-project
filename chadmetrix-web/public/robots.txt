@@ -1,0 +1,11 @@
+# public/robots.txt
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /analysis/new
+Disallow: /admin/
+Disallow: /login/
+
+Sitemap: https://chadmetrix.ru/sitemap.xml
+Host: https://chadmetrix.ru
