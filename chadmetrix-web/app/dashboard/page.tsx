@@ -27,18 +27,24 @@ interface Report {
 export default function DashboardPage() {
     const { user } = useAuth();
     const [reports, setReports] = useState<Report[]>([]);
+    const [allReports, setAllReports] = useState<Report[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchReports = async () => {
             try {
                 const data: ReportData[] = await getReports();
-                const formatted: Report[] = data.slice(0, 3).map((item) => ({
+                // Форматируем ВСЕ отчёты
+                const formatted: Report[] = data.map((item) => ({
                     id: item.id,
                     score: item.report?.overall_score || 0,
                     date: item.created_at || new Date().toISOString(),
                 }));
-                setReports(formatted);
+
+                // Сохраняем все отчёты
+                setAllReports(formatted);
+                // Показываем только последние 3 на главной
+                setReports(formatted.slice(0, 3));
             } catch (error) {
                 console.error("Failed to load reports:", error);
             } finally {
@@ -49,9 +55,9 @@ export default function DashboardPage() {
         fetchReports();
     }, []);
 
-    const totalReports = reports.length;
-    const avgScore = reports.length > 0
-        ? (reports.reduce((sum, r) => sum + r.score, 0) / reports.length).toFixed(1)
+    const totalReports = allReports.length;
+    const avgScore = allReports.length > 0
+        ? (allReports.reduce((sum, r) => sum + r.score, 0) / allReports.length).toFixed(1)
         : "0.0";
 
     return (
@@ -127,7 +133,7 @@ export default function DashboardPage() {
                     <div className="flex items-center justify-between mb-6">
                         <h2 className="text-xl font-semibold text-white">Последние отчёты</h2>
                         <Link href="/reports" className="text-gray-400 hover:text-white text-sm">
-                            Смотреть все →
+                            Смотреть все ({totalReports}) →
                         </Link>
                     </div>
 
