@@ -92,25 +92,50 @@ export default function RootLayout({
   return (
     <html lang="ru" className="dark">
       <head>
-        <link rel="sitemap" href="/sitemap.xml" type="application/xml" />
-        <link rel="alternate" type="application/rss+xml" title="chadmetrix" href="/blog/rss.xml" />
+        {/* SEO / Verification */}
         <meta name="yandex-verification" content="ваш-код-верификации" />
         <meta name="google-site-verification" content="ваш-код-верификации" />
+
+        {/* Sitemap */}
+        <link rel="sitemap" href="/sitemap.xml" type="application/xml" />
+
+        {/* RSS (если будет блог) */}
+        <link rel="alternate" type="application/rss+xml" title="chadmetrix" href="/blog/rss.xml" />
+
+        {/* Icons */}
+        <link rel="icon" href="/favicon.ico" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+        {/* PWA */}
+        <link rel="manifest" href="/site.webmanifest" />
+
+        {/* Open Graph (дублируем для надёжности) */}
+        <meta property="og:image" content="https://chadmetrix.ru/og-image.jpg" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:type" content="website" />
+
+        {/* Twitter */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:image" content="https://chadmetrix.ru/og-image.jpg" />
+
+        {/* Structured Data */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "WebSite",
-              "name": "chadmetrix",
-              "url": "https://chadmetrix.ru",
-              "description": "AI-анализ внешности по 17 метрикам. Объективная оценка и персональный роадмап улучшений.",
-              "potentialAction": {
+              name: "chadmetrix",
+              url: "https://chadmetrix.ru",
+              description:
+                "AI-анализ внешности по 17 метрикам. Объективная оценка и персональный роадмап улучшений.",
+              potentialAction: {
                 "@type": "SearchAction",
-                "target": "https://chadmetrix.ru/search?q={search_term_string}",
-                "query-input": "required name=search_term_string"
-              }
-            })
+                target: "https://chadmetrix.ru/search?q={search_term_string}",
+                "query-input": "required name=search_term_string",
+              },
+            }),
           }}
         />
       </head>
