@@ -3,10 +3,11 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { ReportCard } from "@/components/report-card";
-import { Filter, Search, ChevronDown, Loader2 } from "lucide-react";
+import { Filter, Search, ChevronDown, Loader2, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getReports } from "@/lib/api";
 import Link from "next/link";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 // Интерфейс на основе моделей БД
 interface ReportData {
@@ -26,12 +27,17 @@ interface Report {
 type SortOption = "newest" | "oldest" | "score-high" | "score-low";
 
 export default function ReportsPage() {
+    const { user } = useAuth();
     const [reports, setReports] = useState<Report[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [sortBy, setSortBy] = useState<SortOption>("newest");
     const [showFilters, setShowFilters] = useState(false);
     const [scoreFilter, setScoreFilter] = useState<{ min: number; max: number } | null>(null);
+
+    // Проверяем, есть ли у пользователя доступ к сравнению (HTN или CHAD тариф)
+    const tariffType = user?.tariff_type?.toLowerCase();
+    const canCompare = tariffType === "htn" || tariffType === "chad";
 
     // Загрузка реальных отчётов
     useEffect(() => {
@@ -140,6 +146,19 @@ export default function ReportsPage() {
                             </select>
                             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
                         </div>
+
+                        {/* Кнопка сравнения - только для HTN/CHAD */}
+                        {canCompare && (
+                            <Link href="/analysis/compare">
+                                <Button
+                                    variant="outline"
+                                    className="glass border-white/20 hover:bg-white/10"
+                                >
+                                    <BarChart3 className="w-4 h-4 mr-2" />
+                                    Сравнить анализы
+                                </Button>
+                            </Link>
+                        )}
 
                         {/* Фильтр */}
                         <Button

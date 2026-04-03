@@ -1,11 +1,14 @@
 # backend/analysis.py
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks, Form
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks, Form, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import desc
 import uuid
 import os
 import json
 import logging
 from io import BytesIO
+from typing import Optional, List
+from datetime import datetime
 
 from PIL import Image
 
@@ -21,7 +24,7 @@ router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 UPLOAD_DIR = "/var/www/chadmetrix/uploads"
 PUBLIC_URL_BASE = "https://chadmetrix.ru/uploads"
 MAX_FILE_SIZE = 2 * 1024 * 1024  # 2MB
-TARGET_SIZE = (1200, 1200)  # Макс размер после сжатия
+TARGET_SIZE = (1200, 1200)
 JPEG_QUALITY = 85
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -31,14 +34,11 @@ def compress_image(file: UploadFile) -> BytesIO:
     """Сжимает изображение до приемлемого размера"""
     image = Image.open(file.file)
 
-    # Конвертируем в RGB (для JPEG)
     if image.mode in ('RGBA', 'P'):
         image = image.convert('RGB')
 
-    # Уменьшаем если слишком большое
     image.thumbnail(TARGET_SIZE, Image.Resampling.LANCZOS)
 
-    # Сохраняем с оптимизацией
     output = BytesIO()
     image.save(output, format='JPEG', quality=JPEG_QUALITY, optimize=True)
     output.seek(0)
@@ -51,12 +51,11 @@ def compress_image(file: UploadFile) -> BytesIO:
 
 
 def save_file(file: UploadFile) -> tuple[str, str]:
-    """Сохраняет файл, сжимает если нужно, возвращает (local_path, public_url)"""
+    """Сохраняет файл, возвращает (local_path, public_url)"""
     ext = file.filename.split(".")[-1].lower() if file.filename else 'jpg'
     if ext not in ['jpg', 'jpeg', 'png', 'webp']:
         raise HTTPException(400, "Only JPG, PNG, WEBP allowed")
 
-    # Проверяем размер оригинала
     try:
         file.file.seek(0, 2)
         original_size = file.file.tell()
@@ -67,7 +66,6 @@ def save_file(file: UploadFile) -> tuple[str, str]:
     if original_size > MAX_FILE_SIZE:
         raise HTTPException(413, f"File too large. Max size is 2MB.")
 
-    # Сжимаем всегда для оптимизации
     compressed = compress_image(file)
 
     name = f"{uuid.uuid4()}.jpg"
@@ -77,13 +75,10 @@ def save_file(file: UploadFile) -> tuple[str, str]:
     with open(local_path, "wb") as f:
         f.write(compressed.getvalue())
 
-    # Меняем владельца на www-data (UID 33 обычно для www-data)
     try:
-        os.chown(local_path, 33, 33)  # www-data:www-data
-        os.chmod(local_path, 0o644)     # rw-r--r--
+        os.chown(local_path, 33, 33)
+        os.chmod(local_path, 0o644)
         logger.info(f"[UPLOAD] File {name} created with www-data ownership")
-    except PermissionError as e:
-        logger.warning(f"[UPLOAD] Could not chown file to www-data (need root): {e}")
     except Exception as e:
         logger.warning(f"[UPLOAD] Could not change file permissions: {e}")
 
@@ -98,23 +93,32 @@ async def create_analysis(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Создать анализ лица"""
-
-    # Логирование для отладки
-    logger.info(f"[UPLOAD] User={current_user.id}, front={photo_front.filename if photo_front else 'MISSING'}, side={photo_side.filename if photo_side else 'NONE'}")
+    """Создать анализ лица с поддержкой разных тарифов"""
+    
+    logger.info(f"[UPLOAD] User={current_user.id}, tariff={current_user.tariff_type}, front={photo_front.filename if photo_front else 'MISSING'}, side={photo_side.filename if photo_side else 'NONE'}")
 
     if not photo_front:
         raise HTTPException(400, "photo_front is required")
 
-    # === ПРОВЕРКА БОНУСОВ И ЛИМИТОВ ===
+    # Проверка лимитов
     total_available = (current_user.photo_uses_remaining or 0) + (current_user.bonus_uses_remaining or 0)
     
     if total_available <= 0:
         raise HTTPException(403, "No photo analyses remaining. Please upgrade your plan.")
     
-    # Бонус теперь работает как обычный анализ (и анфас, и профиль) - без ограничений
+    # Определяем, можно ли загружать профиль
+    tariff_type = current_user.tariff_type.lower()
+    can_use_side = tariff_type in ['htn', 'chad'] or current_user.bonus_uses_remaining > 0
+    
+    # Если пользователь пытается загрузить профиль, но не имеет права
+    if photo_side and not can_use_side:
+        raise HTTPException(403, "Side photo is only available for HTN/CHAD tariffs or with bonus uses")
+    
+    # Определяем тип тарифа для LLM
+    is_chad_tariff = tariff_type == 'chad'
+    has_side_photo = photo_side is not None
 
-    # Сохраняем фото (с автоматическим сжатием)
+    # Сохраняем фото
     try:
         front_path, front_url = save_file(photo_front)
     except Exception as e:
@@ -122,12 +126,11 @@ async def create_analysis(
         raise HTTPException(400, f"Failed to process front photo: {str(e)}")
 
     side_url = None
-    if photo_side:
+    if photo_side and can_use_side:
         try:
             _, side_url = save_file(photo_side)
         except Exception as e:
             logger.error(f"[UPLOAD] Failed to save side photo: {e}")
-            # Продолжаем без side фото
 
     # Создаем запись анализа
     analysis = Analysis(
@@ -155,8 +158,7 @@ async def create_analysis(
         )
         db.add(photo2)
 
-    # === СПИСАНИЕ БОНУСА ИЛИ ОБЫЧНОГО ЛИМИТА ===
-    # Используем бонус первым (если есть), иначе обычный лимит
+    # Списание бонуса или обычного лимита
     if current_user.bonus_uses_remaining > 0:
         current_user.bonus_uses_remaining -= 1
         logger.info(f"[UPLOAD] Used bonus use for user {current_user.id}. Remaining bonus: {current_user.bonus_uses_remaining}")
@@ -166,39 +168,47 @@ async def create_analysis(
 
     db.commit()
 
-    # Запускаем анализ в фоне
+    # Запускаем анализ в фоне с параметрами тарифа
     background_tasks.add_task(
         process_analysis_task,
         analysis.id,
         front_url,
-        current_user.id
+        current_user.id,
+        has_side_photo,
+        is_chad_tariff
     )
 
-    logger.info(f"[UPLOAD] Analysis created: {analysis.id}")
+    logger.info(f"[UPLOAD] Analysis created: {analysis.id}, type: {'CHAD' if is_chad_tariff else ('HTN' if has_side_photo else 'BASIC')}")
 
     return {
         "analysis_id": analysis.id,
         "status": "processing",
+        "analysis_type": "chad" if is_chad_tariff else ("htn" if has_side_photo else "basic"),
         "message": "Analysis started. Check /api/analysis/{id}/status for progress."
     }
 
 
-def process_analysis_task(analysis_id: str, photo_url: str, user_id: str):
+def process_analysis_task(analysis_id: str, photo_url: str, user_id: str, has_side_photo: bool, is_chad_tariff: bool):
     """Фоновая обработка — создаём свою сессию БД"""
     db = SessionLocal()
     try:
         import asyncio
-        asyncio.run(_process_analysis(analysis_id, photo_url, user_id, db))
+        asyncio.run(_process_analysis(analysis_id, photo_url, user_id, has_side_photo, is_chad_tariff, db))
     finally:
         db.close()
 
 
-async def _process_analysis(analysis_id: str, photo_url: str, user_id: str, db: Session):
+async def _process_analysis(analysis_id: str, photo_url: str, user_id: str, has_side_photo: bool, is_chad_tariff: bool, db: Session):
     """Асинхронная обработка анализа"""
     try:
-        logger.info(f"[ANALYSIS] Starting LLM analysis for {analysis_id}")
+        logger.info(f"[ANALYSIS] Starting LLM analysis for {analysis_id}, has_side_photo={has_side_photo}, is_chad_tariff={is_chad_tariff}")
 
-        result = await vsellm_client.analyze_face(photo_url, days=30)
+        result = await vsellm_client.analyze_face(
+            photo_url, 
+            days=30, 
+            has_side_photo=has_side_photo, 
+            is_chad_tariff=is_chad_tariff
+        )
 
         logger.info(f"[ANALYSIS] LLM returned scores: obj={result.get('objective_score')}, pot={result.get('potential_score')}")
 
@@ -214,6 +224,15 @@ async def _process_analysis(analysis_id: str, photo_url: str, user_id: str, db: 
 
         user = db.query(User).filter(User.id == user_id).first()
 
+        # Для CHAD тарифа добавляем акцент на слабые зоны в метаданные
+        meta_data = {
+            'category': result.get('category'),
+            'summary': result.get('summary'),
+            'analysis_type': result.get('analysis_type'),
+            'has_side_photo': has_side_photo,
+            'weak_zones_focus': weak_zones if is_chad_tariff else []
+        }
+
         report = Report(
             id=str(uuid.uuid4()),
             user_id=user_id,
@@ -222,11 +241,7 @@ async def _process_analysis(analysis_id: str, photo_url: str, user_id: str, db: 
             potential_score=result.get('potential_score'),
             metrics_data=json.dumps(result.get('metrics', {})),
             improvement_plan=result.get('roadmap'),
-            meta=json.dumps({
-                'category': result.get('category'),
-                'summary': result.get('summary'),
-                'raw_response_preview': result.get('raw_response', '')[:500]
-            })
+            meta=json.dumps(meta_data)
         )
         db.add(report)
         db.flush()
@@ -273,6 +288,8 @@ def get_analysis(
             "category": json.loads(report.meta).get('category') if report and report.meta else None,
             "summary": json.loads(report.meta).get('summary') if report and report.meta else None,
             "improvement_plan": report.improvement_plan if report else None,
+            "analysis_type": json.loads(report.meta).get('analysis_type') if report and report.meta else None,
+            "weak_zones_focus": json.loads(report.meta).get('weak_zones_focus') if report and report.meta else []
         } if report else None,
         "created_at": analysis.created_at.isoformat() if analysis.created_at else None
     }
@@ -300,4 +317,133 @@ def get_analysis_status(
         "status": "completed" if has_report else "processing",
         "has_report": has_report,
         "report_id": analysis.report_id
+    }
+
+
+@router.get("/history")
+def get_analysis_history(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0)
+):
+    """Получить историю анализов пользователя для сравнений"""
+    analyses = db.query(Analysis).filter(
+        Analysis.user_id == current_user.id,
+        Analysis.is_deleted == False
+    ).order_by(desc(Analysis.created_at)).offset(offset).limit(limit).all()
+    
+    result = []
+    for analysis in analyses:
+        report = db.query(Report).filter(Report.id == analysis.report_id).first()
+        result.append({
+            "id": analysis.id,
+            "created_at": analysis.created_at.isoformat(),
+            "has_report": analysis.report_id is not None,
+            "overall_score": report.overall_score if report else None,
+            "photos": json.loads(analysis.photos) if analysis.photos else []
+        })
+    
+    return {
+        "analyses": result,
+        "total": len(result)
+    }
+
+
+@router.post("/compare/system")
+async def system_comparison(
+    analysis_ids: List[str],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Системное сравнение метрик между анализами"""
+    analyses = db.query(Analysis).filter(
+        Analysis.id.in_(analysis_ids),
+        Analysis.user_id == current_user.id
+    ).all()
+    
+    if len(analyses) < 2:
+        raise HTTPException(400, "Need at least 2 analyses for comparison")
+    
+    reports = []
+    for analysis in analyses:
+        report = db.query(Report).filter(Report.id == analysis.report_id).first()
+        if report and report.metrics_data:
+            reports.append({
+                "id": analysis.id,
+                "date": analysis.created_at.isoformat(),
+                "metrics": json.loads(report.metrics_data),
+                "overall_score": report.overall_score
+            })
+    
+    if len(reports) < 2:
+        raise HTTPException(400, "Not enough completed reports for comparison")
+    
+    # Сравниваем метрики
+    comparison = {
+        "analyses": reports,
+        "metrics_progress": {},
+        "overall_progress": reports[-1]["overall_score"] - reports[0]["overall_score"] if reports[0]["overall_score"] and reports[-1]["overall_score"] else 0
+    }
+    
+    # Сравниваем каждую метрику
+    first_metrics = reports[0].get("metrics", {})
+    last_metrics = reports[-1].get("metrics", {})
+    
+    for metric_name in first_metrics:
+        first_value = first_metrics.get(metric_name, {}).get("value", 0)
+        last_value = last_metrics.get(metric_name, {}).get("value", 0)
+        comparison["metrics_progress"][metric_name] = {
+            "first": first_value,
+            "last": last_value,
+            "change": last_value - first_value
+        }
+    
+    return comparison
+
+
+@router.post("/compare/llm")
+async def llm_comparison(
+    before_analysis_id: str,
+    after_analysis_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """LLM сравнение двух фото (глубокий анализ изменений)"""
+    before_analysis = db.query(Analysis).filter(
+        Analysis.id == before_analysis_id,
+        Analysis.user_id == current_user.id
+    ).first()
+    
+    after_analysis = db.query(Analysis).filter(
+        Analysis.id == after_analysis_id,
+        Analysis.user_id == current_user.id
+    ).first()
+    
+    if not before_analysis or not after_analysis:
+        raise HTTPException(404, "Analysis not found")
+    
+    # Получаем фото
+    before_photos = json.loads(before_analysis.photos) if before_analysis.photos else []
+    after_photos = json.loads(after_analysis.photos) if after_analysis.photos else []
+    
+    if not before_photos or not after_photos:
+        raise HTTPException(400, "Photos not found for comparison")
+    
+    # Используем первое фото (анфас) для сравнения
+    before_url = before_photos[0]
+    after_url = after_photos[0]
+    
+    comparison_result = await vsellm_client.analyze_comparison(
+        before_url, 
+        after_url, 
+        is_llm_comparison=True
+    )
+    
+    return {
+        "before_analysis_id": before_analysis_id,
+        "after_analysis_id": after_analysis_id,
+        "before_date": before_analysis.created_at.isoformat(),
+        "after_date": after_analysis.created_at.isoformat(),
+        "comparison": comparison_result["comparison"]
     }
