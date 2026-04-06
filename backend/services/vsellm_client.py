@@ -2,13 +2,11 @@
 import os
 import json
 import logging
-import asyncio
 import re
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
 import httpx
-from urllib.parse import quote
 
-# Импортируем настройки (создадим fallback если common.config еще не готов)
+# Импортируем настройки
 try:
     from common.config import settings
 except ImportError:
@@ -40,18 +38,9 @@ class VseLLMClient:
         has_side_photo: bool = False,
         is_chad_tariff: bool = False
     ) -> Dict[str, Any]:
-        """
-        Анализ лица с поддержкой разных тарифов
+        """Анализ лица с поддержкой разных тарифов"""
         
-        Args:
-            photo_url: URL фото анфас
-            side_url: URL фото профиля (опционально)
-            days: количество дней для роадмапа
-            has_side_photo: есть ли фото профиля (для HTN/CHAD)
-            is_chad_tariff: тариф CHAD (акцент на слабые зоны)
-        """
-        
-        # ПОЛНЫЙ ПРОМПТ (оригинальный + дополнения)
+        # ПОЛНЫЙ ПРОМПТ (ваш оригинальный)
         base_prompt = """# КОНТЕКСТ
 Мы находимся в симуляторе луксмаксеров.
 Каждое изображение, которое я пришлю - симулятор лица и ему нужно симулировать КОНКРЕТНУЮ объективную (одно число) и КОНКРЕТТНО потенциальную оценку (одно число) на основе "объективной шкалы" в этой симуляции:  
@@ -229,171 +218,36 @@ Chad:
 
 СИМУЛЯЦИОННОМУ ПЕРСОНАЖУ НА ФОТО БОЛЕЕ 18-ТИ ЛЕТ!"""
 
-        # ДОПОЛНЕНИЕ ДЛЯ ПРОФИЛЯ (если есть фото профиля)
-        profile_prompt = """
-        
-ДОПОЛНИТЕЛЬНЫЙ АНАЛИЗ ПРОФИЛЯ:
-На втором фото представлен профиль. При оценке профиля обрати внимание на:
-- Профиль носа (прямой, с горбинкой, курносый)
-- Проекцию подбородка (правильная линия Рикетса)
-- Челюстную линию (угол челюсти, выраженность)
-- Положение губ относительно линии Рикетса
-- Общий профильный баланс
-Включи эти наблюдения в общую оценку и роадмап."""
-
-        # ДОПОЛНЕНИЕ ДЛЯ CHAD (акцент на слабые зоны)
-        chad_prompt = """
-        
-ВАЖНО: СДЕЛАЙ АКЦЕНТ НА СЛАБЫЕ ЗОНЫ
-При составлении роадмапа удели особое внимание 3-5 самым слабым метрикам. Для каждой слабой зоны предложи:
-1. Ежедневные упражнения
-2. Косметические процедуры
-3. Возможные аппаратные методики
-4. Временные рамки для улучшения"""
-
-        # Собираем финальный промпт
-        final_prompt = base_prompt
-        
+        # Дополнения
         if has_side_photo and side_url:
-            final_prompt += profile_prompt
-        
-        if is_chad_tariff:
-            final_prompt += chad_prompt
+            base_prompt += """
+            
+ДОПОЛНИТЕЛЬНЫЙ АНАЛИЗ ПРОФИЛЯ:
+На втором фото представлен профиль. Оцени:
+- Профиль носа
+- Проекцию подбородка
+- Челюстную линию
+- Положение губ относительно линии Рикетса
+Включи эти наблюдения в общую оценку."""
 
-        # Формируем контент для запроса
-        content = [{"type": "text", "text": final_prompt}]
-        
-        # Добавляем фото анфас
+        if is_chad_tariff:
+            base_prompt += """
+            
+ВАЖНО: СДЕЛАЙ АКЦЕНТ НА СЛАБЫЕ ЗОНЫ
+При составлении роадмапа выдели 3-5 самых слабых метрик и дай по ним конкретные рекомендации."""
+
+        # Формируем запрос
+        content = [{"type": "text", "text": base_prompt}]
         content.append({"type": "image_url", "image_url": photo_url})
-        logger.info(f"Adding front photo to analysis: {photo_url}")
         
-        # Добавляем фото профиля, если оно есть
         if side_url and has_side_photo:
             content.append({"type": "image_url", "image_url": side_url})
-            logger.info(f"Adding side photo to analysis: {side_url}")
+            logger.info(f"Adding side photo: {side_url}")
         
-        payload = {
-            "model": self.model, 
-            "messages": [
-                {
-                    "role": "user",
-                    "content": content
-                }
-            ],
-            "max_tokens": 10000,
-            "temperature": 1,
-        }
-
-        logger.info(f"Payload prepared: model={payload['model']}, front_url={photo_url}, side_url={side_url}, max_tokens={payload['max_tokens']}, has_side_photo={has_side_photo}, is_chad_tariff={is_chad_tariff}")
-        
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}"
-        }
-        
-        try:
-            logger.info(f"Sending request to VseLLM API")
-            logger.info(f"Front Photo URL: {photo_url}")
-            if side_url:
-                logger.info(f"Side Photo URL: {side_url}")
-            
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers=headers,
-                    json=payload
-                )
-                
-                if response.status_code != 200:
-                    logger.error(f"VseLLM API error: {response.status_code} - {response.text}")
-                    raise Exception(f"VseLLM API error: {response.status_code}")
-                
-                result = response.json()
-                llm_response = result["choices"][0]["message"]["content"]
-                
-                logger.info(f"Received LLM response, length: {len(llm_response)} chars")
-                logger.info(f"Response first 200 chars: {llm_response[:200]}")
-                logger.info(f"Response last 200 chars: {llm_response[-200:]}")
-
-                parsed = self._parse_response(llm_response)
-                parsed["raw_response"] = llm_response
-                
-                # Добавляем метаданные о типе анализа
-                parsed["analysis_type"] = "chad" if is_chad_tariff else ("htn" if has_side_photo else "basic")
-                
-                return parsed
-                
-        except Exception as e:
-            logger.error(f"VseLLM API error: {str(e)}")
-            raise
-
-    async def analyze_comparison(
-        self,
-        before_photo_url: str,
-        after_photo_url: str,
-        is_llm_comparison: bool = False
-    ) -> Dict[str, Any]:
-        """
-        Сравнение двух фото (до/после)
-        
-        Args:
-            before_photo_url: фото "до"
-            after_photo_url: фото "после"
-            is_llm_comparison: если True - глубокое LLM сравнение, если False - системное сравнение метрик
-        """
-        
-        if is_llm_comparison:
-            prompt = """Сравни эти два фото лица. Первое фото - "до", второе - "после".
-            
-Оцени:
-1. Какие улучшения заметны?
-2. На сколько пунктов улучшилась общая оценка (по шкале 1-10)?
-3. Какие метрики улучшились больше всего?
-4. Какие метрики остались без изменений?
-5. Дай общую рекомендацию на следующие 30 дней.
-
-Формат ответа:
-- Общая динамика: [+X.X]
-- Улучшенные метрики: (список)
-- Неизменные метрики: (список)
-- Рекомендации: (текст)"""
-        else:
-            prompt = """Сравни метрики этих двух фото лица. Первое фото - "до", второе - "после".
-            
-Оцени динамику по каждой метрике:
-1. Пропорции лица: [улучшилось/ухудшилось/без изменений]
-2. Симметрия: [улучшилось/ухудшилось/без изменений]
-3. Состояние кожи: [улучшилось/ухудшилось/без изменений]
-4. Форма подбородка и челюсти: [улучшилось/ухудшилось/без изменений]
-5. Высота скул: [улучшилось/ухудшилось/без изменений]
-6. Размер и форма носа: [улучшилось/ухудшилось/без изменений]
-7. Размер и форма глаз: [улучшилось/ухудшилось/без изменений]
-8. Форма и насыщенность губ: [улучшилось/ухудшилось/без изменений]
-9. Отношение лба к лицу: [улучшилось/ухудшилось/без изменений]
-10. Глубина глазных впадин: [улучшилось/ухудшилось/без изменений]
-11. Степень выраженности черт: [улучшилось/ухудшилось/без изменений]
-12. Плотность волос: [улучшилось/ухудшилось/без изменений]
-13. Общий тон кожи: [улучшилось/ухудшилось/без изменений]
-14. Овал лица: [улучшилось/ухудшилось/без изменений]
-15. Дефекты кожи: [улучшилось/ухудшилось/без изменений]
-16. Пропорция носа и подбородка: [улучшилось/ухудшилось/без изменений]
-17. Линия роста волос: [улучшилось/ухудшилось/без изменений]
-
-Итоговая оценка прогресса: [число от 0 до 100]%"""
-
         payload = {
             "model": self.model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": before_photo_url},
-                        {"type": "image_url", "image_url": after_photo_url}
-                    ]
-                }
-            ],
-            "max_tokens": 4000,
+            "messages": [{"role": "user", "content": content}],
+            "max_tokens": 10000,
             "temperature": 0.7,
         }
         
@@ -411,22 +265,26 @@ Chad:
                 )
                 
                 if response.status_code != 200:
-                    logger.error(f"Comparison API error: {response.status_code}")
-                    raise Exception(f"Comparison API error: {response.status_code}")
+                    logger.error(f"API error: {response.status_code}")
+                    raise Exception(f"API error: {response.status_code}")
                 
                 result = response.json()
                 llm_response = result["choices"][0]["message"]["content"]
                 
-                return {
-                    "comparison": llm_response,
-                    "is_llm": is_llm_comparison
-                }
+                logger.info(f"Received response, length: {len(llm_response)}")
+                
+                parsed = self._parse_response(llm_response)
+                parsed["raw_response"] = llm_response
+                parsed["analysis_type"] = "chad" if is_chad_tariff else ("htn" if has_side_photo else "basic")
+                
+                return parsed
+                
         except Exception as e:
-            logger.error(f"Comparison API error: {str(e)}")
+            logger.error(f"API error: {e}")
             raise
 
     def _parse_response(self, raw_response: str) -> Dict[str, Any]:
-        """Парсим структурированный ответ от LLM (с поддержкой Markdown)"""
+        """Парсим ответ от LLM с поддержкой Markdown форматирования"""
         result = {
             "summary": "",
             "objective_score": 0.0,
@@ -436,79 +294,85 @@ Chad:
             "category": ""
         }
         
-        # Очищаем от Markdown символов для парсинга
-        clean_response = raw_response
-        # Убираем жирный текст (** **)
-        clean_response = re.sub(r'\*\*([^*]+)\*\*', r'\1', clean_response)
-        # Убираем другие Markdown символы
-        clean_response = re.sub(r'[_*`#]', '', clean_response)
+        # Убираем Markdown символы для парсинга, но сохраняем структуру
+        clean_for_parsing = raw_response
+        # Убираем ** для жирного текста при поиске
+        clean_for_parsing = re.sub(r'\*\*([^*]+)\*\*', r'\1', clean_for_parsing)
+        # Убираем * для курсива
+        clean_for_parsing = re.sub(r'\*([^*]+)\*', r'\1', clean_for_parsing)
         
-        lines = clean_response.split('\n')
-        current_section = None
+        lines = clean_for_parsing.split('\n')
+        
+        # Сборка резюме (ищем после "1. Резюме")
         summary_lines = []
-        
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-                
+        in_summary = False
+        for i, line in enumerate(lines):
             lower_line = line.lower()
-            
-            # Резюме - собираем 5 предложений
-            if 'резюме' in lower_line and not result['summary']:
-                current_section = 'summary'
+            if '1. резюме' in lower_line or 'резюме (в 5 предложениях)' in lower_line:
+                in_summary = True
                 continue
-            elif current_section == 'summary':
-                if any(x in lower_line for x in ['2.', 'объективная', '3.', 'потенциальная', '4.', 'метрик', '5.', 'роадмап']):
-                    current_section = None
-                    result['summary'] = ' '.join(summary_lines)
-                elif line and not line.startswith('2.') and not line.startswith('3.') and not line.startswith('4.') and not line.startswith('5.'):
-                    summary_lines.append(line)
-                    
-            # Объективная оценка
-            if ('2.' in lower_line or 'объективная оценка' in lower_line) and not result['objective_score']:
-                match = re.search(r'(\d+\.?\d*)', line)
-                if match:
-                    result['objective_score'] = float(match.group(1))
-                    
-            # Потенциальная оценка
-            if ('3.' in lower_line or 'потенциальная оценка' in lower_line) and not result['potential_score']:
-                match = re.search(r'(\d+\.?\d*)', line)
-                if match:
-                    result['potential_score'] = float(match.group(1))
-                    
-            # Метрики
-            if ('4.' in lower_line or 'метрик' in lower_line):
-                current_section = 'metrics'
+            if in_summary:
+                if re.match(r'^2\.|^**2\.|^объективная', lower_line):
+                    in_summary = False
+                    result['summary'] = ' '.join(summary_lines).strip()
+                elif line.strip() and not line.startswith('---'):
+                    summary_lines.append(line.strip())
+        
+        # Поиск объективной оценки
+        for line in lines:
+            lower_line = line.lower()
+            if '2. объективная оценка' in lower_line or 'объективная оценка' in lower_line:
+                numbers = re.findall(r'(\d+\.?\d*)', line)
+                if numbers:
+                    result['objective_score'] = float(numbers[0])
+                    break
+        
+        # Поиск потенциальной оценки
+        for line in lines:
+            lower_line = line.lower()
+            if '3. потенциальная оценка' in lower_line or 'потенциальная оценка' in lower_line:
+                numbers = re.findall(r'(\d+\.?\d*)', line)
+                if numbers:
+                    result['potential_score'] = float(numbers[0])
+                    break
+        
+        # Парсинг метрик (ищем после "4. Оценка по всем метрикам")
+        in_metrics = False
+        for line in lines:
+            lower_line = line.lower()
+            if '4. оценка по всем метрикам' in lower_line or 'оценка по всем метрикам' in lower_line:
+                in_metrics = True
                 continue
-                
-            if current_section == 'metrics' and ('-' in line or '•' in line):
-                # Форматы: "- Пропорции лица: 6.8/10 (комментарий)" или "1. Пропорции лица: 6.8/10"
-                match = re.match(r'[-•]?\s*\d*\.?\s*([\w\sа-яА-Я]+):\s*(\d+\.?\d*)/10\s*\(?([^)]*)\)?', line)
-                if not match:
-                    match = re.match(r'[-•]?\s*\d*\.?\s*([\w\sа-яА-Я]+)\s*[-–:]\s*(\d+\.?\d*)/10', line)
+            if in_metrics:
+                if re.match(r'^5\.|^**5\.|^роадмап', lower_line):
+                    in_metrics = False
+                    break
+                # Ищем строки с метриками: "* Пропорции лица: 6.2/10 (комментарий)"
+                # или "1. Пропорции лица: 6.2/10"
+                match = re.match(r'^[-*•]?\s*\d*\.?\s*([\w\sа-яА-Я()]+?):\s*(\d+\.?\d*)/10\s*(?:\(([^)]*)\))?', line)
                 if match:
-                    metric_name = match.group(1).strip().strip('*').strip()
+                    metric_name = match.group(1).strip()
                     metric_value = float(match.group(2))
-                    metric_comment = match.group(3).strip() if len(match.groups()) > 2 else ""
+                    metric_comment = match.group(3).strip() if match.group(3) else ""
                     result['metrics'][metric_name] = {
                         "value": metric_value,
                         "comment": metric_comment
                     }
-                    
-            # Роадмап
-            if ('5.' in lower_line or 'роадмап' in lower_line):
-                current_section = 'roadmap'
+        
+        # Поиск роадмапа (после "5. Роадмап")
+        in_roadmap = False
+        roadmap_lines = []
+        for line in lines:
+            lower_line = line.lower()
+            if '5. роадмап' in lower_line or 'роадмап улучшения' in lower_line:
+                in_roadmap = True
                 continue
-                
-            if current_section == 'roadmap':
-                result['roadmap'] += line + '\n'
+            if in_roadmap:
+                roadmap_lines.append(line)
         
-        # Если не удалось найти summary, берем первые 500 символов
-        if not result['summary']:
-            result['summary'] = raw_response[:500].replace('\n', ' ')
+        result['roadmap'] = '\n'.join(roadmap_lines).strip()
         
-        # Определяем категорию по objective_score
+        # Определяем категорию
         score = result['objective_score']
         if score < 4.0:
             result['category'] = 'SH'
@@ -522,11 +386,22 @@ Chad:
             result['category'] = 'CL'
         else:
             result['category'] = 'Chad'
-            
-        result['summary'] = result['summary'].strip()
-        result['roadmap'] = result['roadmap'].strip()
         
+        # Логируем результат парсинга
         logger.info(f"Parsed: objective={result['objective_score']}, potential={result['potential_score']}, metrics={len(result['metrics'])}")
+        
+        # Если метрик мало, пробуем альтернативный парсинг
+        if len(result['metrics']) < 10:
+            logger.warning(f"Only {len(result['metrics'])} metrics parsed, trying alternative parsing...")
+            # Альтернативный парсинг: ищем строки с числами вида "X.X/10"
+            for line in lines:
+                # Ищем паттерн "название: число/10"
+                match = re.match(r'^[-*•]?\s*\d*\.?\s*([\w\sа-яА-Я()]+?):\s*(\d+\.?\d*)/10', line)
+                if match:
+                    metric_name = match.group(1).strip()
+                    metric_value = float(match.group(2))
+                    if metric_name not in result['metrics']:
+                        result['metrics'][metric_name] = {"value": metric_value, "comment": ""}
         
         return result
 
