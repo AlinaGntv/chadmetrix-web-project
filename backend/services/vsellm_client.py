@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import re
+import base64
 from typing import Dict, Any, Optional
 import httpx
 
@@ -12,7 +13,7 @@ except ImportError:
     class FallbackSettings:
         VSELM_API_KEY = os.getenv("VSELM_API_KEY")
         VSELM_BASE_URL = os.getenv("VSELM_BASE_URL", "https://api.vsellm.ru/v1")
-        VSELM_MODEL = os.getenv("VSELM_MODEL", "openai/gpt-5.2")
+        VSELM_MODEL = os.getenv("VSELM_MODEL", "openai/gpt-5.1")
     settings = FallbackSettings()
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,26 @@ class VseLLMClient:
         
         if not self.api_key:
             raise ValueError("VSELM_API_KEY is not set")
+    
+    async def _check_photo_accessible(self, photo_url: str) -> bool:
+        """Проверяем что фото доступно по URL"""
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.head(photo_url, follow_redirects=True)
+                logger.info(f"[PHOTO CHECK] URL: {photo_url}, status: {response.status_code}, "
+                           f"content-type: {response.headers.get('content-type')}")
+                
+                if response.status_code == 200:
+                    # Пробуем скачать для проверки размера
+                    download_resp = await client.get(photo_url, timeout=10.0)
+                    logger.info(f"[PHOTO CHECK] Downloaded: {len(download_resp.content)} bytes")
+                    return True
+                else:
+                    logger.error(f"[PHOTO CHECK] Photo not accessible: {response.status_code}")
+                    return False
+        except Exception as e:
+            logger.error(f"[PHOTO CHECK] Failed: {e}")
+            return False
         
     async def analyze_face(
         self, 
@@ -38,6 +59,16 @@ class VseLLMClient:
         is_chad_tariff: bool = False
     ) -> Dict[str, Any]:
         """Анализ лица с поддержкой разных тарифов"""
+        
+        # Проверяем доступность фото перед отправкой
+        front_accessible = await self._check_photo_accessible(photo_url)
+        if not front_accessible:
+            logger.error(f"[ANALYZE] Front photo not accessible: {photo_url}")
+        
+        if side_url and has_side_photo:
+            side_accessible = await self._check_photo_accessible(side_url)
+            if not side_accessible:
+                logger.error(f"[ANALYZE] Side photo not accessible: {side_url}")
         
         # Базовый контекст (ОРИГИНАЛЬНЫЙ - не меняем!)
         context_prompt = """# КОНТЕКСТ
@@ -130,61 +161,93 @@ Chad:
 ВАЖНО: СДЕЛАЙ АКЦЕНТ НА СЛАБЫЕ ЗОНЫ
 При составлении роадмапа выдели 3-5 самых слабых метрик и дай по ним конкретные рекомендации."""
 
-        # JSON-инструкция (добавляем в конец, минимально)
-        # JSON-инструкция (упрощённая)
+        # JSON-инструкция
         json_instruction = """
 
-        === ФОРМАТ ОТВЕТА (СТРОГО) ===
-        Верни ТОЛЬКО JSON. Без Markdown, без ```, без текста до/после.
+=== ФОРМАТ ОТВЕТА (СТРОГО) ===
+Верни ТОЛЬКО JSON. Без Markdown, без ```, без текста до/после.
 
-        Структура:
-        {
-        "summary": "5 предложений резюме",
-        "objective_score": 5.6,
-        "potential_score": 6.8,
-        "metrics": {
-            "Пропорции лица": {"value": 6.2, "comment": "..."},
-            ... (все 17 метрик)
-        },
-        "profile_analysis": {
-            "nose": "...",
-            "chin": "...",
-            "jaw": "...",
-            "lips_position": "...",
-            "balance": "..."
-        },
-        "roadmap": {
-            "week1": "Текст первой недели...",
-            "week2": "Текст второй недели...",
-            "week3": "Текст третьей недели...",
-            "week4": "Текст четвертой недели..."
-        },
-        "weak_zones": ["метрика1", "метрика2", "метрика3"],
-        "category": "MTN"
-        }
+Структура:
+{
+  "summary": "5 предложений резюме",
+  "objective_score": 5.6,
+  "potential_score": 6.8,
+  "metrics": {
+    "Пропорции лица": {"value": 6.2, "comment": "..."},
+    "Симметрия глаз, бровей и губ": {"value": 6.0, "comment": "..."},
+    "Состояние кожи": {"value": 5.2, "comment": "..."},
+    "Форма подбородка и челюсти": {"value": 5.0, "comment": "..."},
+    "Высота скул": {"value": 5.4, "comment": "..."},
+    "Размер и форма носа": {"value": 6.8, "comment": "..."},
+    "Размер и форма глаз": {"value": 5.8, "comment": "..."},
+    "Форма и насыщенность губ": {"value": 6.0, "comment": "..."},
+    "Отношение лба к лицу": {"value": 6.3, "comment": "..."},
+    "Глубина глазных впадин": {"value": 5.5, "comment": "..."},
+    "Степень выраженности и контрастности черт лица": {"value": 5.0, "comment": "..."},
+    "Плотность и текстура волос на лбу": {"value": 6.5, "comment": "..."},
+    "Общий тон кожи": {"value": 5.3, "comment": "..."},
+    "Овал лица": {"value": 5.4, "comment": "..."},
+    "Дефекты кожи": {"value": 5.1, "comment": "..."},
+    "Пропорция длины носа и подбородка": {"value": 5.3, "comment": "..."},
+    "Линия роста волос": {"value": 6.4, "comment": "..."}
+  },
+  "profile_analysis": {
+    "nose": "...",
+    "chin": "...",
+    "jaw": "...",
+    "lips_position": "...",
+    "balance": "..."
+  },
+  "roadmap": {
+    "week1": "Текст первой недели...",
+    "week2": "Текст второй недели...",
+    "week3": "Текст третьей недели...",
+    "week4": "Текст четвертой недели..."
+  },
+  "weak_zones": ["метрика1", "метрика2", "метрика3"],
+  "category": "MTN"
+}
 
-        Важно:
-        - Все 17 метрик обязательны
-        - roadmap.week1, week2, week3, week4 — просто текст, НЕ JSON внутри
-        - Числа с одной десятичной
-        - СИМУЛЯЦИОННОМУ ПЕРСОНАЖУ НА ФОТО БОЛЕЕ 18-ТИ ЛЕТ!"""
+Важно:
+- Все 17 метрик обязательны с value и comment
+- roadmap.week1-week4 — просто текст, не JSON внутри
+- Числа с одной десятичной
+- СИМУЛЯЦИОННОМУ ПЕРСОНАЖУ НА ФОТО БОЛЕЕ 18-ТИ ЛЕТ!"""
 
         full_prompt = context_prompt + json_instruction
 
-        # Формируем запрос
+        # Формируем запрос как в рабочей старой версии
         content = [{"type": "text", "text": full_prompt}]
-        content.append({"type": "image_url", "image_url": photo_url}) 
-
+        
+        # Добавляем фото анфас с detail: high (как в старой версии)
+        content.append({
+            "type": "image_url",
+            "image_url": {
+                "url": photo_url,
+                "detail": "high"
+            }
+        })
+        
+        # Добавляем фото профиля если есть
         if side_url and has_side_photo:
-            content.append({"type": "image_url", "image_url": side_url}) 
-            logger.info(f"Adding side photo: {side_url}")
+            content.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": side_url,
+                    "detail": "high"
+                }
+            })
+            logger.info(f"[VSELLM] Adding side photo: {side_url}")
         
         payload = {
             "model": self.model,
             "messages": [{"role": "user", "content": content}],
-            "max_tokens": 8000,
-            "temperature": 0.7,
+            "max_tokens": 10000,
+            "temperature": 1,
         }
+        
+        logger.info(f"[VSELLM] Sending request: model={self.model}, "
+                   f"photos={len(content)-1}, max_tokens={payload['max_tokens']}")
         
         headers = {
             "Content-Type": "application/json",
@@ -200,17 +263,23 @@ Chad:
                 )
                 
                 if response.status_code != 200:
-                    error_text = await response.aread()
-                    logger.error(f"API error: {response.status_code}, body: {error_text[:500]}")
-                    raise Exception(f"API error: {response.status_code}, details: {error_text[:200]}")
+                    error_text = response.text
+                    logger.error(f"[VSELLM] API error: {response.status_code} - {error_text[:500]}")
+                    raise Exception(f"VseLLM API error: {response.status_code}")
                 
                 result = response.json()
                 llm_response = result["choices"][0]["message"]["content"]
                 
-                logger.info(f"Received response, length: {len(llm_response)}")
-                logger.info(f"Response first 500 chars: {llm_response[:500]}")
+                logger.info(f"[VSELLM] Received response: {len(llm_response)} chars")
+                logger.info(f"[VSELLM] First 300 chars: {llm_response[:300]}")
+                logger.info(f"[VSELLM] Last 200 chars: {llm_response[-200:]}")
                 
-                # Парсим JSON ответ
+                # Проверяем упоминание проблем с фото
+                lower_response = llm_response.lower()
+                if any(x in lower_response for x in ["не вижу", "закрыто", "не доступно", "не могу", "фото не"]):
+                    logger.warning(f"[VSELLM] LLM might not see photo properly!")
+                
+                # Парсим JSON
                 parsed = self._parse_json_response(llm_response)
                 parsed["raw_response"] = llm_response
                 parsed["analysis_type"] = "chad" if is_chad_tariff else ("htn" if has_side_photo else "basic")
@@ -218,13 +287,12 @@ Chad:
                 return parsed
                 
         except Exception as e:
-            logger.error(f"API error: {e}")
+            logger.error(f"[VSELLM] Error: {e}")
             raise
 
     def _parse_json_response(self, raw_response: str) -> Dict[str, Any]:
-        """Парсим JSON ответ от LLM с максимальной надёжностью"""
+        """Парсим JSON ответ от LLM"""
         
-        # Структура по умолчанию
         result = {
             "summary": "",
             "objective_score": 0.0,
@@ -241,21 +309,20 @@ Chad:
         
         # Убираем Markdown обертки
         cleanup_patterns = [
-            (r'^```json\s*', ''),
-            (r'^```\s*', ''),
-            (r'\s*```$', ''),
-            (r'^[^{]*', ''),
-            (r'[^}]*$', ''),
+            r'^```json\s*',
+            r'^```\s*',
+            r'\s*```$',
+            r'^[^{]*',
+            r'[^}]*$',
         ]
         
-        for pattern, repl in cleanup_patterns:
-            json_str = re.sub(pattern, repl, json_str, flags=re.DOTALL)
+        for pattern in cleanup_patterns:
+            json_str = re.sub(pattern, '', json_str, flags=re.DOTALL)
         
         json_str = json_str.strip()
         
         # Ищем JSON в тексте если не нашли сразу
         if not json_str.startswith('{'):
-            # Ищем первое вхождение {
             start_idx = raw_response.find('{')
             end_idx = raw_response.rfind('}')
             if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
@@ -264,13 +331,13 @@ Chad:
         try:
             data = json.loads(json_str)
             
-            # Извлекаем основные поля
+            # Извлекаем поля
             result["summary"] = str(data.get("summary", ""))
             result["objective_score"] = float(data.get("objective_score", 0))
             result["potential_score"] = float(data.get("potential_score", 0))
             result["category"] = str(data.get("category", ""))
             
-            # Обрабатываем metrics
+            # Метрики
             metrics_data = data.get("metrics", {})
             if isinstance(metrics_data, dict):
                 for metric_name, metric_info in metrics_data.items():
@@ -285,7 +352,7 @@ Chad:
                             "comment": ""
                         }
             
-            # Обрабатываем profile_analysis
+            # Профиль
             profile_data = data.get("profile_analysis", {})
             if isinstance(profile_data, dict):
                 result["profile_analysis"] = {
@@ -296,7 +363,7 @@ Chad:
                     "balance": str(profile_data.get("balance", ""))
                 }
             
-            # Обрабатываем roadmap (оставляем как объект для фронта)
+            # Роадмап
             roadmap_data = data.get("roadmap", {})
             if isinstance(roadmap_data, dict):
                 result["roadmap"] = {
@@ -306,31 +373,25 @@ Chad:
                     "week4": str(roadmap_data.get("week4", ""))
                 }
             elif isinstance(roadmap_data, str):
-                # Если пришла строка, парсим или сохраняем как week1
                 result["roadmap"] = {"week1": roadmap_data, "week2": "", "week3": "", "week4": ""}
             
-            # Обрабатываем weak_zones
+            # Слабые зоны
             weak_zones_data = data.get("weak_zones", [])
             if isinstance(weak_zones_data, list):
                 result["weak_zones"] = [str(z) for z in weak_zones_data if z]
             
         except json.JSONDecodeError as e:
-            logger.error(f"JSON parse error: {e}")
-            logger.error(f"Raw response: {raw_response[:1000]}")
+            logger.error(f"[VSELLM] JSON parse error: {e}")
+            logger.error(f"[VSELLM] Raw: {raw_response[:500]}")
             
-            # Fallback: извлекаем числа
+            # Fallback
             numbers = re.findall(r'(\d+\.\d+)', raw_response)
             if numbers:
                 result["objective_score"] = float(numbers[0])
                 if len(numbers) > 1:
                     result["potential_score"] = float(numbers[1])
-            
-            # Пробуем найти summary
-            summary_match = re.search(r'"summary":\s*"([^"]+)"', raw_response)
-            if summary_match:
-                result["summary"] = summary_match.group(1)
         
-        # Определяем категорию если не задана
+        # Авто-категория
         if not result["category"] and result["objective_score"] > 0:
             score = result["objective_score"]
             result["category"] = (
@@ -341,8 +402,9 @@ Chad:
                 'CL' if score < 8.0 else 'Chad'
             )
         
-        logger.info(f"Parsed: obj={result['objective_score']}, pot={result['potential_score']}, "
-                   f"metrics={len(result['metrics'])}, category={result['category']}")
+        logger.info(f"[VSELLM] Parsed: obj={result['objective_score']}, "
+                   f"pot={result['potential_score']}, metrics={len(result['metrics'])}, "
+                   f"category={result['category']}")
         
         return result
 
@@ -357,15 +419,21 @@ Chad:
 
         content = [
             {"type": "text", "text": prompt},
-            {"type": "image_url", "image_url": before_url},  # без {"url": ...}
-            {"type": "image_url", "image_url": after_url}    # без {"url": ...}
+            {
+                "type": "image_url",
+                "image_url": {"url": before_url, "detail": "high"}
+            },
+            {
+                "type": "image_url",
+                "image_url": {"url": after_url, "detail": "high"}
+            }
         ]
         
         payload = {
             "model": self.model,
             "messages": [{"role": "user", "content": content}],
             "max_tokens": 4000,
-            "temperature": 0.7,
+            "temperature": 1,
         }
         
         headers = {
@@ -384,7 +452,6 @@ Chad:
                 result = response.json()
                 llm_response = result["choices"][0]["message"]["content"]
                 
-                # Парсим JSON
                 json_str = llm_response.strip()
                 json_str = re.sub(r'^```json\s*', '', json_str)
                 json_str = re.sub(r'^```\s*', '', json_str)
@@ -394,10 +461,10 @@ Chad:
                     data = json.loads(json_str)
                     return data
                 except json.JSONDecodeError:
-                    return {"comparison": {"summary": "Не удалось распарсить сравнение", "raw": llm_response}}
+                    return {"comparison": {"summary": "Не удалось распарсить", "raw": llm_response}}
                     
         except Exception as e:
-            logger.error(f"Comparison error: {e}")
+            logger.error(f"[VSELLM] Comparison error: {e}")
             return {"comparison": {"summary": f"Ошибка: {str(e)}"}}
 
 
