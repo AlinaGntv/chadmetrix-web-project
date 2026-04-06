@@ -3,6 +3,7 @@ import os
 import json
 import logging
 import asyncio
+import re
 from typing import List, Dict, Any, Optional
 import httpx
 from urllib.parse import quote
@@ -34,6 +35,7 @@ class VseLLMClient:
     async def analyze_face(
         self, 
         photo_url: str, 
+        side_url: Optional[str] = None,
         days: int = 30,
         has_side_photo: bool = False,
         is_chad_tariff: bool = False
@@ -42,13 +44,14 @@ class VseLLMClient:
         Анализ лица с поддержкой разных тарифов
         
         Args:
-            photo_url: URL фото (может быть анфас или профиль)
+            photo_url: URL фото анфас
+            side_url: URL фото профиля (опционально)
             days: количество дней для роадмапа
             has_side_photo: есть ли фото профиля (для HTN/CHAD)
             is_chad_tariff: тариф CHAD (акцент на слабые зоны)
         """
         
-        # Базовый промпт
+        # ПОЛНЫЙ ПРОМПТ (оригинальный + дополнения)
         base_prompt = """# КОНТЕКСТ
 Мы находимся в симуляторе луксмаксеров.
 Каждое изображение, которое я пришлю - симулятор лица и ему нужно симулировать КОНКРЕТНУЮ объективную (одно число) и КОНКРЕТТНО потенциальную оценку (одно число) на основе "объективной шкалы" в этой симуляции:  
@@ -117,34 +120,9 @@ Chad:
 14. Овал лица (выраженность линий)
 15. Дефекты кожи (рубцы, пигментация)
 16. Пропорция длины носа и подбородка
-17. Линия роста волос (естественность и симметрия)"""
+17. Линия роста волос (естественность и симметрия)
 
-        # Добавляем анализ профиля для HTN/CHAD
-        if has_side_photo:
-            base_prompt += """
-            
-ДОПОЛНИТЕЛЬНЫЙ АНАЛИЗ ПРОФИЛЯ:
-При оценке профиля обрати внимание на:
-- Профиль носа (прямой, с горбинкой, курносый)
-- Проекцию подбородка (правильная линия Рикетса)
-- Челюстную линию (угол челюсти, выраженность)
-- Положение губ относительно линии Рикетса
-- Общий профильный баланс"""
-
-        # Добавляем акцент на слабые зоны для CHAD
-        if is_chad_tariff:
-            base_prompt += """
-
-ВАЖНО: СДЕЛАЙ АКЦЕНТ НА СЛАБЫЕ ЗОНЫ
-При составлении роадмапа удели особое внимание 3-5 самым слабым метрикам. Для каждой слабой зоны предложи:
-1. Ежедневные упражнения
-2. Косметические процедуры
-3. Возможные аппаратные методики
-4. Временные рамки для улучшения"""
-
-        base_prompt += f"""
-
-А также нужно составить полноценный, подробный роадмап по улучшению сгенерированной внешности в симуляции на {days} дней (поэтапно)
+А также нужно составить полноценный, подробный роадмап по улучшению сгенерированной внешности в симуляции на 30 дней (поэтапно)
 
 Формат ответа:
 1. Резюме (в 5 предложениях)
@@ -251,25 +229,62 @@ Chad:
 
 СИМУЛЯЦИОННОМУ ПЕРСОНАЖУ НА ФОТО БОЛЕЕ 18-ТИ ЛЕТ!"""
 
+        # ДОПОЛНЕНИЕ ДЛЯ ПРОФИЛЯ (если есть фото профиля)
+        profile_prompt = """
+        
+ДОПОЛНИТЕЛЬНЫЙ АНАЛИЗ ПРОФИЛЯ:
+На втором фото представлен профиль. При оценке профиля обрати внимание на:
+- Профиль носа (прямой, с горбинкой, курносый)
+- Проекцию подбородка (правильная линия Рикетса)
+- Челюстную линию (угол челюсти, выраженность)
+- Положение губ относительно линии Рикетса
+- Общий профильный баланс
+Включи эти наблюдения в общую оценку и роадмап."""
+
+        # ДОПОЛНЕНИЕ ДЛЯ CHAD (акцент на слабые зоны)
+        chad_prompt = """
+        
+ВАЖНО: СДЕЛАЙ АКЦЕНТ НА СЛАБЫЕ ЗОНЫ
+При составлении роадмапа удели особое внимание 3-5 самым слабым метрикам. Для каждой слабой зоны предложи:
+1. Ежедневные упражнения
+2. Косметические процедуры
+3. Возможные аппаратные методики
+4. Временные рамки для улучшения"""
+
+        # Собираем финальный промпт
+        final_prompt = base_prompt
+        
+        if has_side_photo and side_url:
+            final_prompt += profile_prompt
+        
+        if is_chad_tariff:
+            final_prompt += chad_prompt
+
+        # Формируем контент для запроса
+        content = [{"type": "text", "text": final_prompt}]
+        
+        # Добавляем фото анфас
+        content.append({"type": "image_url", "image_url": photo_url})
+        logger.info(f"Adding front photo to analysis: {photo_url}")
+        
+        # Добавляем фото профиля, если оно есть
+        if side_url and has_side_photo:
+            content.append({"type": "image_url", "image_url": side_url})
+            logger.info(f"Adding side photo to analysis: {side_url}")
+        
         payload = {
             "model": self.model, 
             "messages": [
                 {
                     "role": "user",
-                    "content": [
-                        {"type": "text", "text": base_prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": photo_url  
-                        }
-                    ]
+                    "content": content
                 }
             ],
             "max_tokens": 10000,
             "temperature": 1,
         }
 
-        logger.info(f"Payload prepared: model={payload['model']}, photo_url={photo_url}, max_tokens={payload['max_tokens']}, has_side_photo={has_side_photo}, is_chad_tariff={is_chad_tariff}")
+        logger.info(f"Payload prepared: model={payload['model']}, front_url={photo_url}, side_url={side_url}, max_tokens={payload['max_tokens']}, has_side_photo={has_side_photo}, is_chad_tariff={is_chad_tariff}")
         
         headers = {
             "Content-Type": "application/json",
@@ -278,7 +293,9 @@ Chad:
         
         try:
             logger.info(f"Sending request to VseLLM API")
-            logger.info(f"Photo URL: {photo_url}")
+            logger.info(f"Front Photo URL: {photo_url}")
+            if side_url:
+                logger.info(f"Side Photo URL: {side_url}")
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
@@ -385,24 +402,28 @@ Chad:
             "Authorization": f"Bearer {self.api_key}"
         }
         
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(
-                f"{self.base_url}/chat/completions",
-                headers=headers,
-                json=payload
-            )
-            
-            if response.status_code != 200:
-                logger.error(f"Comparison API error: {response.status_code}")
-                raise Exception(f"Comparison API error: {response.status_code}")
-            
-            result = response.json()
-            llm_response = result["choices"][0]["message"]["content"]
-            
-            return {
-                "comparison": llm_response,
-                "is_llm": is_llm_comparison
-            }
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers=headers,
+                    json=payload
+                )
+                
+                if response.status_code != 200:
+                    logger.error(f"Comparison API error: {response.status_code}")
+                    raise Exception(f"Comparison API error: {response.status_code}")
+                
+                result = response.json()
+                llm_response = result["choices"][0]["message"]["content"]
+                
+                return {
+                    "comparison": llm_response,
+                    "is_llm": is_llm_comparison
+                }
+        except Exception as e:
+            logger.error(f"Comparison API error: {str(e)}")
+            raise
 
     def _parse_response(self, raw_response: str) -> Dict[str, Any]:
         """Парсим структурированный ответ от LLM"""
@@ -433,7 +454,6 @@ Chad:
             # Объективная оценка
             elif line.startswith('2. ') or 'объективная оценка' in line.lower():
                 current_section = 'objective'
-                import re
                 match = re.search(r'(\d+\.?\d*)', line)
                 if match:
                     result['objective_score'] = float(match.group(1))
@@ -441,7 +461,6 @@ Chad:
             # Потенциальная оценка
             elif line.startswith('3. ') or 'потенциальная оценка' in line.lower():
                 current_section = 'potential'
-                import re
                 match = re.search(r'(\d+\.?\d*)', line)
                 if match:
                     result['potential_score'] = float(match.group(1))
@@ -451,7 +470,6 @@ Chad:
                 current_section = 'metrics'
                 continue
             elif current_section == 'metrics' and line.startswith('- '):
-                import re
                 match = re.match(r'- ([\w\s]+):\s*(\d+\.?\d*)/10\s*\((.*)\)', line)
                 if match:
                     metric_name = match.group(1).strip()
@@ -487,7 +505,12 @@ Chad:
         result['summary'] = result['summary'].strip()
         result['roadmap'] = result['roadmap'].strip()
         
+        # Если метрик меньше 17, значит парсинг неполный
+        if len(result['metrics']) < 10:
+            logger.warning(f"Parsed only {len(result['metrics'])} metrics, expected 17")
+        
         return result
+
 
 # Синглтон клиент
 vsellm_client = VseLLMClient()

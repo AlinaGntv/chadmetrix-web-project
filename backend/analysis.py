@@ -168,11 +168,12 @@ async def create_analysis(
 
     db.commit()
 
-    # Запускаем анализ в фоне с параметрами тарифа
+    # 🔥 ИСПРАВЛЕНО: Передаём оба URL в фоновую задачу
     background_tasks.add_task(
         process_analysis_task,
         analysis.id,
         front_url,
+        side_url,  # ← ДОБАВЛЯЕМ ФОТО ПРОФИЛЯ
         current_user.id,
         has_side_photo,
         is_chad_tariff
@@ -188,23 +189,28 @@ async def create_analysis(
     }
 
 
-def process_analysis_task(analysis_id: str, photo_url: str, user_id: str, has_side_photo: bool, is_chad_tariff: bool):
+def process_analysis_task(analysis_id: str, front_url: str, side_url: str | None, user_id: str, has_side_photo: bool, is_chad_tariff: bool):
     """Фоновая обработка — создаём свою сессию БД"""
     db = SessionLocal()
     try:
         import asyncio
-        asyncio.run(_process_analysis(analysis_id, photo_url, user_id, has_side_photo, is_chad_tariff, db))
+        asyncio.run(_process_analysis(analysis_id, front_url, side_url, user_id, has_side_photo, is_chad_tariff, db))
     finally:
         db.close()
 
 
-async def _process_analysis(analysis_id: str, photo_url: str, user_id: str, has_side_photo: bool, is_chad_tariff: bool, db: Session):
-    """Асинхронная обработка анализа"""
+async def _process_analysis(analysis_id: str, front_url: str, side_url: str | None, user_id: str, has_side_photo: bool, is_chad_tariff: bool, db: Session):
+    """Асинхронная обработка анализа с поддержкой двух фото"""
     try:
         logger.info(f"[ANALYSIS] Starting LLM analysis for {analysis_id}, has_side_photo={has_side_photo}, is_chad_tariff={is_chad_tariff}")
+        logger.info(f"[ANALYSIS] Front URL: {front_url}")
+        if side_url:
+            logger.info(f"[ANALYSIS] Side URL: {side_url}")
 
+        # 🔥 ИСПРАВЛЕНО: Передаём оба URL в analyze_face
         result = await vsellm_client.analyze_face(
-            photo_url, 
+            front_url,
+            side_url=side_url,  # ← ДОБАВЛЯЕМ ФОТО ПРОФИЛЯ
             days=30, 
             has_side_photo=has_side_photo, 
             is_chad_tariff=is_chad_tariff
