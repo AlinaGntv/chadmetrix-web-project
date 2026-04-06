@@ -426,7 +426,7 @@ Chad:
             raise
 
     def _parse_response(self, raw_response: str) -> Dict[str, Any]:
-        """Парсим структурированный ответ от LLM"""
+        """Парсим структурированный ответ от LLM (с поддержкой Markdown)"""
         result = {
             "summary": "",
             "objective_score": 0.0,
@@ -436,56 +436,77 @@ Chad:
             "category": ""
         }
         
-        lines = raw_response.split('\n')
+        # Очищаем от Markdown символов для парсинга
+        clean_response = raw_response
+        # Убираем жирный текст (** **)
+        clean_response = re.sub(r'\*\*([^*]+)\*\*', r'\1', clean_response)
+        # Убираем другие Markdown символы
+        clean_response = re.sub(r'[_*`#]', '', clean_response)
+        
+        lines = clean_response.split('\n')
         current_section = None
+        summary_lines = []
         
         for line in lines:
             line = line.strip()
             if not line:
                 continue
                 
-            # Резюме
-            if line.startswith('1. ') and 'резюме' in line.lower():
+            lower_line = line.lower()
+            
+            # Резюме - собираем 5 предложений
+            if 'резюме' in lower_line and not result['summary']:
                 current_section = 'summary'
                 continue
-            elif current_section == 'summary' and line and not line.startswith('2. '):
-                result['summary'] += line + ' '
-                
+            elif current_section == 'summary':
+                if any(x in lower_line for x in ['2.', 'объективная', '3.', 'потенциальная', '4.', 'метрик', '5.', 'роадмап']):
+                    current_section = None
+                    result['summary'] = ' '.join(summary_lines)
+                elif line and not line.startswith('2.') and not line.startswith('3.') and not line.startswith('4.') and not line.startswith('5.'):
+                    summary_lines.append(line)
+                    
             # Объективная оценка
-            elif line.startswith('2. ') or 'объективная оценка' in line.lower():
-                current_section = 'objective'
+            if ('2.' in lower_line or 'объективная оценка' in lower_line) and not result['objective_score']:
                 match = re.search(r'(\d+\.?\d*)', line)
                 if match:
                     result['objective_score'] = float(match.group(1))
                     
             # Потенциальная оценка
-            elif line.startswith('3. ') or 'потенциальная оценка' in line.lower():
-                current_section = 'potential'
+            if ('3.' in lower_line or 'потенциальная оценка' in lower_line) and not result['potential_score']:
                 match = re.search(r'(\d+\.?\d*)', line)
                 if match:
                     result['potential_score'] = float(match.group(1))
                     
-            # Метрики (4.)
-            elif line.startswith('4. ') or 'метрик' in line.lower():
+            # Метрики
+            if ('4.' in lower_line or 'метрик' in lower_line):
                 current_section = 'metrics'
                 continue
-            elif current_section == 'metrics' and line.startswith('- '):
-                match = re.match(r'- ([\w\s]+):\s*(\d+\.?\d*)/10\s*\((.*)\)', line)
+                
+            if current_section == 'metrics' and ('-' in line or '•' in line):
+                # Форматы: "- Пропорции лица: 6.8/10 (комментарий)" или "1. Пропорции лица: 6.8/10"
+                match = re.match(r'[-•]?\s*\d*\.?\s*([\w\sа-яА-Я]+):\s*(\d+\.?\d*)/10\s*\(?([^)]*)\)?', line)
+                if not match:
+                    match = re.match(r'[-•]?\s*\d*\.?\s*([\w\sа-яА-Я]+)\s*[-–:]\s*(\d+\.?\d*)/10', line)
                 if match:
-                    metric_name = match.group(1).strip()
+                    metric_name = match.group(1).strip().strip('*').strip()
                     metric_value = float(match.group(2))
-                    metric_comment = match.group(3).strip()
+                    metric_comment = match.group(3).strip() if len(match.groups()) > 2 else ""
                     result['metrics'][metric_name] = {
                         "value": metric_value,
                         "comment": metric_comment
                     }
                     
-            # Роадмап (5.)
-            elif line.startswith('5. ') or 'роадмап' in line.lower():
+            # Роадмап
+            if ('5.' in lower_line or 'роадмап' in lower_line):
                 current_section = 'roadmap'
                 continue
-            elif current_section == 'roadmap':
+                
+            if current_section == 'roadmap':
                 result['roadmap'] += line + '\n'
+        
+        # Если не удалось найти summary, берем первые 500 символов
+        if not result['summary']:
+            result['summary'] = raw_response[:500].replace('\n', ' ')
         
         # Определяем категорию по objective_score
         score = result['objective_score']
@@ -505,9 +526,7 @@ Chad:
         result['summary'] = result['summary'].strip()
         result['roadmap'] = result['roadmap'].strip()
         
-        # Если метрик меньше 17, значит парсинг неполный
-        if len(result['metrics']) < 10:
-            logger.warning(f"Parsed only {len(result['metrics'])} metrics, expected 17")
+        logger.info(f"Parsed: objective={result['objective_score']}, potential={result['potential_score']}, metrics={len(result['metrics'])}")
         
         return result
 

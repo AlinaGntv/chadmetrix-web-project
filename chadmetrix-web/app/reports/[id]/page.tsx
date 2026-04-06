@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Loader2, Brain, BarChart3, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Loader2, Brain, BarChart3, AlertTriangle, Calendar, TrendingUp, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getReport } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -27,6 +27,27 @@ interface ReportData {
     } | null;
     created_at: string;
 }
+
+// Стандартный список всех 17 метрик
+const ALL_METRICS = [
+    "Пропорции лица",
+    "Симметрия глаз, бровей и губ",
+    "Состояние кожи",
+    "Форма подбородка и челюсти",
+    "Высота скул",
+    "Размер и форма носа",
+    "Размер и форма глаз",
+    "Форма и насыщенность губ",
+    "Отношение лба к лицу",
+    "Глубина глазных впадин",
+    "Степень выраженности и контрастности черт лица",
+    "Плотность и текстура волос на лбу",
+    "Общий тон кожи",
+    "Овал лица",
+    "Дефекты кожи",
+    "Пропорция длины носа и подбородка",
+    "Линия роста волос"
+];
 
 export default function ReportDetailPage() {
     const params = useParams();
@@ -73,26 +94,77 @@ export default function ReportDetailPage() {
         );
     }
 
-    // Преобразуем метрики для отображения
-    const metricsList = report.metrics
-        ? Object.entries(report.metrics).map(([name, data]) => ({
-            name,
-            score: typeof data === 'object' ? data.value : data,
-            comment: typeof data === 'object' ? data.comment : '',
-        }))
-        : [];
+    // Формируем полный список метрик (все 17)
+    const metricsList = ALL_METRICS.map(metricName => {
+        const existing = report.metrics?.[metricName];
+        let score = 5.0;
+        let comment = "";
 
-    // Парсим роадмап из improvement_plan (разбиваем по неделям если есть)
-    const roadmapText = report.report?.improvement_plan || "";
-    const roadmapWeeks = roadmapText.split(/\n\n+/).slice(0, 4);
+        if (existing) {
+            if (typeof existing === 'object') {
+                score = existing.value ?? 5.0;
+                comment = existing.comment ?? "";
+            } else if (typeof existing === 'number') {
+                score = existing;
+            }
+        }
+
+        return { name: metricName, score, comment };
+    }).sort((a, b) => b.score - a.score); // Сортируем по убыванию оценки
 
     // Получаем тип анализа
     const analysisType = report.report?.analysis_type || "basic";
     const weakZonesFocus = report.report?.weak_zones_focus || [];
 
-    // Проверяем, может ли пользователь сравнивать (для отображения кнопки)
+    // Проверяем, может ли пользователь сравнивать
     const tariffType = user?.tariff_type?.toLowerCase();
     const canCompare = tariffType === "htn" || tariffType === "chad";
+
+    // Парсим роадмап по неделям
+    const roadmapText = report.report?.improvement_plan || "";
+
+    const parseRoadmapWeeks = (text: string) => {
+        const weeks = [];
+
+        // Ищем недели в тексте
+        const weekPattern = /(?:Недел[яа]|Week)\s*(\d+)[:\-\s]*([^Н]*(?:Недел[яа]|Week|$))/gi;
+        let match;
+
+        while ((match = weekPattern.exec(text)) !== null) {
+            const weekNum = parseInt(match[1]);
+            let content = match[2].trim();
+            // Убираем остатки следующих недель
+            content = content.replace(/(?:Недел[яа]|Week)\s*\d+.*$/, '').trim();
+            if (content) {
+                weeks.push({ week: weekNum, content });
+            }
+        }
+
+        // Если не нашли по паттерну, пробуем по номерам
+        if (weeks.length === 0) {
+            for (let i = 1; i <= 4; i++) {
+                const regex = new RegExp(`${i}[.)]\\s*([^\\d]+?)(?=\\s*${i + 1}[.)]|$)`, 'is');
+                const weekMatch = text.match(regex);
+                if (weekMatch && weekMatch[1].trim()) {
+                    weeks.push({ week: i, content: weekMatch[1].trim() });
+                }
+            }
+        }
+
+        // Если всё равно не нашли, разбиваем по двойным переносам строк
+        if (weeks.length === 0 && text) {
+            const parts = text.split(/\n\s*\n/);
+            parts.forEach((part, idx) => {
+                if (part.trim() && idx < 4) {
+                    weeks.push({ week: idx + 1, content: part.trim() });
+                }
+            });
+        }
+
+        return weeks;
+    };
+
+    const roadmapWeeks = parseRoadmapWeeks(roadmapText);
 
     return (
         <div className="min-h-screen pt-24 pb-12 px-4">
@@ -124,10 +196,9 @@ export default function ReportDetailPage() {
                             <h1 className="text-3xl font-bold text-white">
                                 Отчёт от {new Date(report.created_at).toLocaleDateString('ru-RU')}
                             </h1>
-                            <div className="flex items-center gap-3 mt-2">
+                            <div className="flex items-center gap-3 mt-2 flex-wrap">
                                 <span className="text-sm text-gray-500">#{report.id.slice(0, 8)}</span>
 
-                                {/* Бейдж типа анализа */}
                                 <span className={`px-3 py-1 rounded-full text-xs font-medium ${analysisType === 'chad'
                                     ? 'bg-purple-500/20 text-purple-400'
                                     : analysisType === 'htn'
@@ -138,15 +209,20 @@ export default function ReportDetailPage() {
                                     {analysisType === 'htn' && 'HTN анализ'}
                                     {analysisType === 'basic' && 'Базовый анализ'}
                                 </span>
+
+                                {report.report?.category && (
+                                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-white/10 text-white">
+                                        {report.report.category}
+                                    </span>
+                                )}
                             </div>
                         </div>
                     </div>
 
                     <div className="grid md:grid-cols-3 gap-6">
-
                         {/* PHOTOS */}
                         <div className="space-y-4">
-                            {report.photos?.map((photo, idx) => (
+                            {report.photos?.slice(0, 2).map((photo, idx) => (
                                 <div
                                     key={idx}
                                     className="aspect-square relative rounded-xl overflow-hidden border border-white/10 bg-gray-900"
@@ -157,7 +233,7 @@ export default function ReportDetailPage() {
                                         fill
                                         className="object-cover"
                                     />
-                                    <div className="absolute bottom-2 left-2 bg-black/50 px-2 py-0.5 rounded text-xs text-white">
+                                    <div className="absolute bottom-2 left-2 bg-black/60 px-2 py-0.5 rounded text-xs text-white">
                                         {idx === 0 ? 'Анфас' : 'Профиль'}
                                     </div>
                                 </div>
@@ -182,22 +258,22 @@ export default function ReportDetailPage() {
                                 max={10}
                                 highlight
                             />
+                            <div className="text-center text-xs text-gray-500 mt-2">
+                                <Target className="w-3 h-3 inline mr-1" />
+                                Потенциал улучшения: {(report.report?.potential_score || 0) - (report.report?.overall_score || 0) > 0 ? '+' : ''}
+                                {((report.report?.potential_score || 0) - (report.report?.overall_score || 0)).toFixed(1)}
+                            </div>
                         </div>
 
                         {/* SUMMARY */}
                         <div className="flex flex-col justify-center">
-                            <h3 className="text-white font-semibold mb-3 text-sm uppercase tracking-wider">
+                            <h3 className="text-white font-semibold mb-3 text-sm uppercase tracking-wider flex items-center gap-2">
+                                <Calendar className="w-4 h-4" />
                                 Резюме
                             </h3>
                             <p className="text-gray-300 text-sm leading-relaxed">
-                                {report.report?.summary || "Анализ выполнен"}
+                                {report.report?.summary || "Анализ выполнен успешно"}
                             </p>
-                            {report.report?.category && (
-                                <div className="mt-4">
-                                    <span className="text-xs text-gray-500 uppercase">Категория</span>
-                                    <p className="text-white font-medium">{report.report.category}</p>
-                                </div>
-                            )}
                         </div>
                     </div>
                 </div>
@@ -228,44 +304,54 @@ export default function ReportDetailPage() {
                     </div>
                 )}
 
-                {/* МЕТРИКИ */}
-                {metricsList.length > 0 && (
-                    <div className="glass rounded-3xl p-8 border border-white/10 mt-6">
-                        <h2 className="text-xl font-semibold text-white mb-6">
-                            Детальные метрики
-                        </h2>
-                        <div className="grid md:grid-cols-2 gap-4">
-                            {metricsList.map((metric, i) => (
+                {/* МЕТРИКИ - все 17 */}
+                <div className="glass rounded-3xl p-8 border border-white/10 mt-6">
+                    <h2 className="text-xl font-semibold text-white mb-6">
+                        Детальные метрики
+                        <span className="text-sm text-gray-500 ml-2">({metricsList.length} из 17)</span>
+                    </h2>
+                    <div className="grid md:grid-cols-2 gap-3">
+                        {metricsList.map((metric, i) => {
+                            const isWeakZone = weakZonesFocus.includes(metric.name);
+                            return (
                                 <div
                                     key={i}
-                                    className={`flex items-center justify-between p-3 rounded-lg border ${weakZonesFocus.includes(metric.name) && analysisType === 'chad'
-                                        ? 'bg-orange-500/10 border-orange-500/20'
-                                        : 'bg-white/5 border-white/5'
+                                    className={`flex items-center justify-between p-3 rounded-lg transition-all ${isWeakZone && analysisType === 'chad'
+                                        ? 'bg-orange-500/10 border border-orange-500/20'
+                                        : 'bg-white/5 border border-white/5 hover:bg-white/10'
                                         }`}
                                 >
-                                    <span className={`text-sm ${weakZonesFocus.includes(metric.name) && analysisType === 'chad'
-                                        ? 'text-orange-300'
-                                        : 'text-gray-400'
-                                        }`}>
-                                        {metric.name}
-                                        {weakZonesFocus.includes(metric.name) && analysisType === 'chad' && (
+                                    <div className="flex-1">
+                                        <span className={`text-sm ${isWeakZone && analysisType === 'chad'
+                                            ? 'text-orange-300'
+                                            : 'text-gray-400'
+                                            }`}>
+                                            {metric.name}
+                                        </span>
+                                        {isWeakZone && analysisType === 'chad' && (
                                             <span className="ml-2 text-xs text-orange-400">(слабая зона)</span>
                                         )}
-                                    </span>
-                                    <div className="text-right">
-                                        <span className={`font-bold ${getScoreColor(metric.score)}`}>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-16 bg-gray-700 rounded-full h-1.5">
+                                            <div
+                                                className="bg-linear-to-r from-blue-500 to-purple-500 h-1.5 rounded-full transition-all"
+                                                style={{ width: `${(metric.score / 10) * 100}%` }}
+                                            />
+                                        </div>
+                                        <span className={`font-bold min-w-8.75 text-right ${metric.score >= 7 ? "text-white" : metric.score >= 5 ? "text-gray-300" : "text-gray-500"
+                                            }`}>
                                             {metric.score.toFixed(1)}
                                         </span>
-                                        <span className="text-gray-600 text-xs ml-2">/10</span>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
+                            );
+                        })}
                     </div>
-                )}
+                </div>
 
-                {/* КОММЕНТАРИИ К МЕТРИКАМ - только для CHAD */}
-                {analysisType === 'chad' && metricsList.some(m => m.comment) && (
+                {/* КОММЕНТАРИИ К МЕТРИКАМ */}
+                {metricsList.some(m => m.comment) && (
                     <div className="glass rounded-3xl p-8 border border-white/10 mt-6">
                         <div className="flex items-center gap-3 mb-4">
                             <Brain className="w-5 h-5 text-purple-400" />
@@ -275,9 +361,9 @@ export default function ReportDetailPage() {
                         </div>
                         <div className="space-y-3">
                             {metricsList.filter(m => m.comment).map((metric, i) => (
-                                <div key={i} className="p-3 rounded-lg bg-white/5">
+                                <div key={i} className="p-3 rounded-lg bg-white/5 border border-white/5">
                                     <p className="text-sm font-medium text-gray-300 mb-1">{metric.name}</p>
-                                    <p className="text-xs text-gray-400">{metric.comment}</p>
+                                    <p className="text-xs text-gray-400 leading-relaxed">{metric.comment}</p>
                                 </div>
                             ))}
                         </div>
@@ -287,24 +373,59 @@ export default function ReportDetailPage() {
                 {/* РОАДМАП */}
                 {roadmapText && (
                     <div className="glass rounded-3xl p-8 border border-white/10 mt-6">
-                        <h2 className="text-xl font-semibold text-white mb-6">
-                            Роадмап на 30 дней
-                        </h2>
-                        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-                            {roadmapWeeks.map((week, i) => (
-                                <div key={i} className="p-4 rounded-xl bg-white/5 border border-white/5">
-                                    <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">
-                                        Неделя {i + 1}
-                                    </div>
-                                    <p className="text-gray-300 text-sm whitespace-pre-line">{week}</p>
-                                </div>
-                            ))}
+                        <div className="flex items-center gap-3 mb-6">
+                            <TrendingUp className="w-5 h-5 text-green-400" />
+                            <h2 className="text-xl font-semibold text-white">
+                                Роадмап на 30 дней
+                            </h2>
                         </div>
+
+                        {roadmapWeeks.length > 0 ? (
+                            <div className="grid md:grid-cols-2 gap-5">
+                                {roadmapWeeks.map((week) => (
+                                    <div key={week.week} className="p-5 rounded-xl bg-white/5 border border-white/10 hover:border-white/20 transition-all">
+                                        <div className="flex items-center gap-3 mb-3">
+                                            <div className="w-8 h-8 rounded-full bg-linear-to-r from-blue-500 to-purple-500 flex items-center justify-center">
+                                                <span className="text-white text-sm font-bold">{week.week}</span>
+                                            </div>
+                                            <h3 className="text-lg font-semibold text-white">Неделя {week.week}</h3>
+                                        </div>
+                                        <div className="text-gray-300 text-sm leading-relaxed space-y-2">
+                                            {week.content.split('\n').map((line, idx) => {
+                                                const trimmed = line.trim();
+                                                if (!trimmed) return null;
+                                                if (trimmed.startsWith('-') || trimmed.startsWith('•') || trimmed.startsWith('*')) {
+                                                    return (
+                                                        <li key={idx} className="ml-4 text-gray-400">
+                                                            {trimmed.substring(1).trim()}
+                                                        </li>
+                                                    );
+                                                }
+                                                if (trimmed.match(/^\d+\./)) {
+                                                    return (
+                                                        <div key={idx} className="mt-2">
+                                                            <span className="text-blue-400 font-medium">{trimmed}</span>
+                                                        </div>
+                                                    );
+                                                }
+                                                return <p key={idx} className="text-gray-400">{trimmed}</p>;
+                                            })}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="p-5 rounded-xl bg-white/5 border border-white/10">
+                                <div className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
+                                    {roadmapText}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
-                {/* ПОДСКАЗКА ДЛЯ CHAD */}
-                {analysisType === 'chad' && (
+                {/* ПОДСКАЗКА ДЛЯ СРАВНЕНИЯ */}
+                {analysisType === 'chad' && canCompare && (
                     <div className="mt-6 text-center">
                         <Link href="/analysis/compare">
                             <Button variant="outline" className="glass border-purple-500/30 text-purple-400 hover:bg-purple-500/10">
@@ -336,16 +457,26 @@ function ScoreBox({
     max: number;
     highlight?: boolean;
 }) {
+    const percentage = (value / max) * 100;
+
     return (
-        <div className={`rounded-xl p-4 text-center border ${highlight
-            ? "bg-white/10 border-white/20"
-            : "bg-white/5 border-white/10"
+        <div className={`rounded-xl p-4 text-center border transition-all ${highlight
+            ? "bg-linear-to-br from-white/10 to-white/5 border-white/20"
+            : "bg-white/5 border-white/10 hover:bg-white/10"
             }`}>
-            <p className="text-gray-400 text-xs uppercase tracking-wider mb-1">
+            <p className="text-gray-400 text-xs uppercase tracking-wider mb-2">
                 {title}
             </p>
+            <div className="relative mb-2">
+                <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                        className="h-full bg-linear-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-500"
+                        style={{ width: `${percentage}%` }}
+                    />
+                </div>
+            </div>
             <div className="flex items-baseline justify-center">
-                <span className="text-3xl font-bold text-white">
+                <span className={`text-3xl font-bold ${highlight ? "text-white" : "text-white"}`}>
                     {value.toFixed(1)}
                 </span>
                 <span className="text-gray-500 text-sm ml-1">
