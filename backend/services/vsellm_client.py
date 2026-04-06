@@ -312,11 +312,16 @@ Chad:
                 in_summary = True
                 continue
             if in_summary:
-                if re.match(r'^2\.|^**2\.|^объективная', lower_line):
+                # Исправленное регулярное выражение - экранируем звездочки
+                if re.match(r'^2\.|^\*\*2\.|^объективная', lower_line):
                     in_summary = False
                     result['summary'] = ' '.join(summary_lines).strip()
                 elif line.strip() and not line.startswith('---'):
                     summary_lines.append(line.strip())
+        
+        # Если не нашли резюме, берем первые 500 символов
+        if not result['summary']:
+            result['summary'] = raw_response[:500].replace('\n', ' ')
         
         # Поиск объективной оценки
         for line in lines:
@@ -327,6 +332,15 @@ Chad:
                     result['objective_score'] = float(numbers[0])
                     break
         
+        # Если не нашли, ищем по паттерну **5.6**
+        if result['objective_score'] == 0.0:
+            match = re.search(r'\*\*?(\d+\.?\d*)\*\*?', raw_response)
+            if match:
+                # Проверяем, что это не часть текста
+                potential_score = float(match.group(1))
+                if 1.0 <= potential_score <= 10.0:
+                    result['objective_score'] = potential_score
+        
         # Поиск потенциальной оценки
         for line in lines:
             lower_line = line.lower()
@@ -336,6 +350,12 @@ Chad:
                     result['potential_score'] = float(numbers[0])
                     break
         
+        # Если не нашли, ищем второе число после объективной
+        if result['potential_score'] == 0.0 and result['objective_score'] > 0:
+            numbers = re.findall(r'(\d+\.?\d*)', raw_response)
+            if len(numbers) >= 2:
+                result['potential_score'] = float(numbers[1])
+        
         # Парсинг метрик (ищем после "4. Оценка по всем метрикам")
         in_metrics = False
         for line in lines:
@@ -344,7 +364,8 @@ Chad:
                 in_metrics = True
                 continue
             if in_metrics:
-                if re.match(r'^5\.|^**5\.|^роадмап', lower_line):
+                # Исправленное регулярное выражение
+                if re.match(r'^5\.|^\*\*5\.|^роадмап', lower_line):
                     in_metrics = False
                     break
                 # Ищем строки с метриками: "* Пропорции лица: 6.2/10 (комментарий)"
@@ -371,6 +392,17 @@ Chad:
                 roadmap_lines.append(line)
         
         result['roadmap'] = '\n'.join(roadmap_lines).strip()
+        
+        # Если роадмап пустой, берем все после последней метрики
+        if not result['roadmap']:
+            # Ищем позицию последней метрики
+            last_metric_pos = -1
+            for metric_name in result['metrics']:
+                pos = raw_response.find(metric_name)
+                if pos > last_metric_pos:
+                    last_metric_pos = pos
+            if last_metric_pos > 0:
+                result['roadmap'] = raw_response[last_metric_pos + 100:].strip()
         
         # Определяем категорию
         score = result['objective_score']
