@@ -30,23 +30,42 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 def compress_image(file: UploadFile) -> BytesIO:
-    """Минимальное сжатие для сохранения качества"""
+    """Минимальное сжатие для сохранения качества - НЕ СЖИМАЕМ СИЛЬНО"""
     image = Image.open(file.file)
     
+    # Конвертируем в RGB
     if image.mode in ('RGBA', 'P'):
+        rgb_image = Image.new('RGB', image.size, (255, 255, 255))
+        if image.mode == 'P':
+            image = image.convert('RGBA')
+        rgb_image.paste(image, mask=image.split()[-1] if image.mode in ('RGBA', 'LA') else None)
+        image = rgb_image
+    elif image.mode != 'RGB':
         image = image.convert('RGB')
     
-    # Не ресайзим, только если > 3000px
-    if max(image.size) > 3000:
-        ratio = 3000 / max(image.size)
+    # Ресайз ТОЛЬКО если очень большое (более 2048px)
+    MAX_DIMENSION = 2048
+    original_size = image.size
+    if max(image.size) > MAX_DIMENSION:
+        ratio = MAX_DIMENSION / max(image.size)
         new_size = (int(image.size[0] * ratio), int(image.size[1] * ratio))
         image = image.resize(new_size, Image.Resampling.LANCZOS)
+        logger.info(f"[IMAGE] Resized from {original_size} to {new_size}")
+    else:
+        logger.info(f"[IMAGE] No resize needed, keeping {original_size}")
     
+    # Сохраняем с МАКСИМАЛЬНЫМ качеством
     output = BytesIO()
-    image.save(output, format='JPEG', quality=95, optimize=False)
+    image.save(output, format='JPEG', quality=95, optimize=False, progressive=False)
     output.seek(0)
     
-    logger.info(f"[IMAGE] Saved: {len(output.getvalue())//1024}KB, size={image.size}")
+    size_kb = len(output.getvalue()) / 1024
+    logger.info(f"[IMAGE] Saved: {size_kb:.0f}KB, size={image.size}, quality=95")
+    
+    # Если всё равно меньше 150KB - логируем предупреждение
+    if size_kb < 150:
+        logger.warning(f"[IMAGE] Image too small ({size_kb:.0f}KB) - may cause blur!")
+    
     return output
 
 
