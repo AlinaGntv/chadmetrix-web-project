@@ -1,4 +1,3 @@
-# backend/analysis.py
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks, Form, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
@@ -95,7 +94,9 @@ async def create_analysis(
 ):
     """Создать анализ лица с поддержкой разных тарифов"""
     
-    logger.info(f"[UPLOAD] User={current_user.id}, tariff={current_user.tariff_type}, front={photo_front.filename if photo_front else 'MISSING'}, side={photo_side.filename if photo_side else 'NONE'}")
+    logger.info(f"[UPLOAD] User={current_user.id}, tariff={current_user.tariff_type}, "
+                f"front={photo_front.filename if photo_front else 'MISSING'}, "
+                f"side={photo_side.filename if photo_side else 'NONE'}")
 
     if not photo_front:
         raise HTTPException(400, "photo_front is required")
@@ -108,7 +109,7 @@ async def create_analysis(
     
     # Определяем, можно ли загружать профиль
     tariff_type = current_user.tariff_type.lower()
-    can_use_side = tariff_type in ['htn', 'chad'] or current_user.bonus_uses_remaining > 0
+    can_use_side = tariff_type in ['htn', 'chad'] or (current_user.bonus_uses_remaining or 0) > 0
     
     # Если пользователь пытается загрузить профиль, но не имеет права
     if photo_side and not can_use_side:
@@ -159,27 +160,30 @@ async def create_analysis(
         db.add(photo2)
 
     # Списание бонуса или обычного лимита
-    if current_user.bonus_uses_remaining > 0:
+    if current_user.bonus_uses_remaining and current_user.bonus_uses_remaining > 0:
         current_user.bonus_uses_remaining -= 1
-        logger.info(f"[UPLOAD] Used bonus use for user {current_user.id}. Remaining bonus: {current_user.bonus_uses_remaining}")
-    elif current_user.photo_uses_remaining > 0:
+        logger.info(f"[UPLOAD] Used bonus use for user {current_user.id}. "
+                   f"Remaining bonus: {current_user.bonus_uses_remaining}")
+    elif current_user.photo_uses_remaining and current_user.photo_uses_remaining > 0:
         current_user.photo_uses_remaining -= 1
-        logger.info(f"[UPLOAD] Used regular use for user {current_user.id}. Remaining regular: {current_user.photo_uses_remaining}")
+        logger.info(f"[UPLOAD] Used regular use for user {current_user.id}. "
+                   f"Remaining regular: {current_user.photo_uses_remaining}")
 
     db.commit()
 
-    # 🔥 ИСПРАВЛЕНО: Передаём оба URL в фоновую задачу
+    # Запускаем фоновую задачу
     background_tasks.add_task(
         process_analysis_task,
         analysis.id,
         front_url,
-        side_url,  # ← ДОБАВЛЯЕМ ФОТО ПРОФИЛЯ
+        side_url,
         current_user.id,
         has_side_photo,
         is_chad_tariff
     )
 
-    logger.info(f"[UPLOAD] Analysis created: {analysis.id}, type: {'CHAD' if is_chad_tariff else ('HTN' if has_side_photo else 'BASIC')}")
+    logger.info(f"[UPLOAD] Analysis created: {analysis.id}, "
+                f"type: {'CHAD' if is_chad_tariff else ('HTN' if has_side_photo else 'BASIC')}")
 
     return {
         "analysis_id": analysis.id,
@@ -189,66 +193,91 @@ async def create_analysis(
     }
 
 
-def process_analysis_task(analysis_id: str, front_url: str, side_url: str | None, user_id: str, has_side_photo: bool, is_chad_tariff: bool):
+def process_analysis_task(analysis_id: str, front_url: str, side_url: str | None, 
+                          user_id: str, has_side_photo: bool, is_chad_tariff: bool):
     """Фоновая обработка — создаём свою сессию БД"""
     db = SessionLocal()
     try:
         import asyncio
-        asyncio.run(_process_analysis(analysis_id, front_url, side_url, user_id, has_side_photo, is_chad_tariff, db))
+        asyncio.run(_process_analysis(analysis_id, front_url, side_url, user_id, 
+                                     has_side_photo, is_chad_tariff, db))
     finally:
         db.close()
 
 
-async def _process_analysis(analysis_id: str, front_url: str, side_url: str | None, user_id: str, has_side_photo: bool, is_chad_tariff: bool, db: Session):
+async def _process_analysis(analysis_id: str, front_url: str, side_url: str | None, 
+                            user_id: str, has_side_photo: bool, is_chad_tariff: bool, db: Session):
     """Асинхронная обработка анализа с поддержкой двух фото"""
     try:
-        logger.info(f"[ANALYSIS] Starting LLM analysis for {analysis_id}, has_side_photo={has_side_photo}, is_chad_tariff={is_chad_tariff}")
+        logger.info(f"[ANALYSIS] Starting LLM analysis for {analysis_id}, "
+                   f"has_side_photo={has_side_photo}, is_chad_tariff={is_chad_tariff}")
         logger.info(f"[ANALYSIS] Front URL: {front_url}")
         if side_url:
             logger.info(f"[ANALYSIS] Side URL: {side_url}")
 
-        # 🔥 ИСПРАВЛЕНО: Передаём оба URL в analyze_face
+        # Вызываем LLM
         result = await vsellm_client.analyze_face(
             front_url,
-            side_url=side_url,  # ← ДОБАВЛЯЕМ ФОТО ПРОФИЛЯ
+            side_url=side_url,
             days=30, 
             has_side_photo=has_side_photo, 
             is_chad_tariff=is_chad_tariff
         )
 
-        logger.info(f"[ANALYSIS] LLM returned scores: obj={result.get('objective_score')}, pot={result.get('potential_score')}")
+        logger.info(f"[ANALYSIS] LLM returned: obj={result.get('objective_score')}, "
+                   f"pot={result.get('potential_score')}, "
+                   f"metrics={len(result.get('metrics', {}))}")
 
         analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first()
         if not analysis:
             logger.error(f"[ANALYSIS] Analysis {analysis_id} not found")
             return
 
+        # Сохраняем метрики
         analysis.metrics = json.dumps(result.get('metrics', {}))
 
-        weak_zones = result.get('weak_zones_focus', [])
-        if not weak_zones:
-            weak_zones = [k for k, v in result.get('metrics', {}).items() if isinstance(v, dict) and v.get('value', 0) < 5]
+        # Определяем слабые зоны
+        weak_zones = result.get('weak_zones', [])
+        if not weak_zones and result.get('metrics'):
+            # Автоматически определяем слабые зоны по значениям < 5
+            metrics = result.get('metrics', {})
+            weak_zones = [
+                name for name, data in metrics.items() 
+                if isinstance(data, dict) and data.get('value', 10) < 5
+            ][:5]  # Максимум 5
+        
         analysis.weak_zones = json.dumps(weak_zones)
 
+        # Получаем пользователя для тарифа
         user = db.query(User).filter(User.id == user_id).first()
 
-        # Для CHAD тарифа добавляем акцент на слабые зоны в метаданные
+        # Формируем метаданные
         meta_data = {
             'category': result.get('category'),
             'summary': result.get('summary'),
             'analysis_type': result.get('analysis_type'),
             'has_side_photo': has_side_photo,
-            'weak_zones_focus': weak_zones if is_chad_tariff else []
+            'weak_zones_focus': weak_zones if is_chad_tariff else [],
+            'profile_analysis': result.get('profile_analysis', {}) if has_side_photo else {}
         }
+
+        # Создаем отчет
+        # roadmap сохраняем как JSON-строку (объект с week1-week4)
+        roadmap_data = result.get('roadmap', {})
+        if isinstance(roadmap_data, dict):
+            roadmap_json = json.dumps(roadmap_data, ensure_ascii=False)
+        else:
+            roadmap_json = json.dumps({"week1": str(roadmap_data), "week2": "", "week3": "", "week4": ""})
 
         report = Report(
             id=str(uuid.uuid4()),
             user_id=user_id,
             tariff=user.tariff_type if user else 'free',
+            pdf_url=None,
             overall_score=result.get('objective_score'),
             potential_score=result.get('potential_score'),
             metrics_data=json.dumps(result.get('metrics', {})),
-            improvement_plan=result.get('roadmap'),
+            improvement_plan=roadmap_json,  # JSON с week1-week4
             meta=json.dumps(meta_data)
         )
         db.add(report)
@@ -284,6 +313,18 @@ def get_analysis(
     if analysis.report_id:
         report = db.query(Report).filter(Report.id == analysis.report_id).first()
 
+    # Парсим roadmap из JSON
+    improvement_plan = None
+    if report and report.improvement_plan:
+        try:
+            roadmap_obj = json.loads(report.improvement_plan)
+            if isinstance(roadmap_obj, dict):
+                improvement_plan = roadmap_obj
+            else:
+                improvement_plan = {"week1": str(roadmap_obj), "week2": "", "week3": "", "week4": ""}
+        except:
+            improvement_plan = {"week1": report.improvement_plan, "week2": "", "week3": "", "week4": ""}
+
     return {
         "id": analysis.id,
         "status": "completed" if report else "processing",
@@ -295,9 +336,10 @@ def get_analysis(
             "potential_score": report.potential_score if report else None,
             "category": json.loads(report.meta).get('category') if report and report.meta else None,
             "summary": json.loads(report.meta).get('summary') if report and report.meta else None,
-            "improvement_plan": report.improvement_plan if report else None,
+            "improvement_plan": improvement_plan,
             "analysis_type": json.loads(report.meta).get('analysis_type') if report and report.meta else None,
-            "weak_zones_focus": json.loads(report.meta).get('weak_zones_focus') if report and report.meta else []
+            "weak_zones_focus": json.loads(report.meta).get('weak_zones_focus') if report and report.meta else [],
+            "profile_analysis": json.loads(report.meta).get('profile_analysis') if report and report.meta else {}
         } if report else None,
         "created_at": analysis.created_at.isoformat() if analysis.created_at else None
     }
@@ -391,7 +433,8 @@ async def system_comparison(
     comparison = {
         "analyses": reports,
         "metrics_progress": {},
-        "overall_progress": reports[-1]["overall_score"] - reports[0]["overall_score"] if reports[0]["overall_score"] and reports[-1]["overall_score"] else 0
+        "overall_progress": reports[-1]["overall_score"] - reports[0]["overall_score"] 
+            if reports[0]["overall_score"] and reports[-1]["overall_score"] else 0
     }
     
     # Сравниваем каждую метрику
@@ -453,5 +496,5 @@ async def llm_comparison(
         "after_analysis_id": after_analysis_id,
         "before_date": before_analysis.created_at.isoformat(),
         "after_date": after_analysis.created_at.isoformat(),
-        "comparison": comparison_result["comparison"]
+        "comparison": comparison_result.get("comparison", {})
     }

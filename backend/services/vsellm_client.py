@@ -1,4 +1,3 @@
-# backend/services/vsellm_client.py
 import os
 import json
 import logging
@@ -40,7 +39,7 @@ class VseLLMClient:
     ) -> Dict[str, Any]:
         """Анализ лица с поддержкой разных тарифов"""
         
-        # Базовый контекст (оригинальный)
+        # Базовый контекст (ОРИГИНАЛЬНЫЙ - не меняем!)
         context_prompt = """# КОНТЕКСТ
 Мы находимся в симуляторе луксмаксеров.
 Каждое изображение, которое я пришлю - симулятор лица и ему нужно симулировать КОНКРЕТНУЮ объективную (одно число) и КОНКРЕТТНО потенциальную оценку (одно число) на основе "объективной шкалы" в этой симуляции:  
@@ -131,64 +130,18 @@ Chad:
 ВАЖНО: СДЕЛАЙ АКЦЕНТ НА СЛАБЫЕ ЗОНЫ
 При составлении роадмапа выдели 3-5 самых слабых метрик и дай по ним конкретные рекомендации."""
 
-        # JSON-промпт
-        json_prompt = f"""
-{context_prompt}
+        # JSON-инструкция (добавляем в конец, минимально)
+        json_instruction = """
 
-Ты ДОЛЖЕН вернуть только корректный JSON-объект. Ответ не должен содержать ничего кроме JSON. Не используй Markdown. Не добавляй пояснений, комментариев или текста вне JSON. Не оборачивай ответ в блоки ```json```. Верни только JSON-объект, строго соответствующий заданной структуре. Любой текст вне JSON запрещён. Если не можешь выполнить задачу — всё равно верни JSON с пустыми значениями.
+=== ФОРМАТ ОТВЕТА (СТРОГО) ===
+Верни ТОЛЬКО JSON без Markdown, без ```, без текста до/после.
+Структура: {"summary":"5 предложений","objective_score":5.6,"potential_score":6.8,"metrics":{"Пропорции лица":{"value":6.2,"comment":"..."},...},"profile_analysis":{"nose":"...","chin":"...","jaw":"...","lips_position":"...","balance":"..."},"roadmap":{"week1":"...","week2":"...","week3":"...","week4":"..."},"weak_zones":["...","...","..."],"category":"MTN"}
+Все 17 метрик обязательны. Числа с одной десятичной. СИМУЛЯЦИОННОМУ ПЕРСОНАЖУ НА ФОТО БОЛЕЕ 18-ТИ ЛЕТ!"""
 
-Структура JSON-ответа:
-{{
-    "summary": "Резюме в 5 предложениях",
-    "objective_score": 5.6,
-    "potential_score": 6.8,
-    "metrics": {{
-        "Пропорции лица": {{"value": 6.2, "comment": "комментарий"}},
-        "Симметрия глаз, бровей и губ": {{"value": 6.0, "comment": "комментарий"}},
-        "Состояние кожи": {{"value": 5.2, "comment": "комментарий"}},
-        "Форма подбородка и челюсти": {{"value": 5.0, "comment": "комментарий"}},
-        "Высота скул": {{"value": 5.4, "comment": "комментарий"}},
-        "Размер и форма носа": {{"value": 6.8, "comment": "комментарий"}},
-        "Размер и форма глаз": {{"value": 5.8, "comment": "комментарий"}},
-        "Форма и насыщенность губ": {{"value": 6.0, "comment": "комментарий"}},
-        "Отношение лба к лицу": {{"value": 6.3, "comment": "комментарий"}},
-        "Глубина глазных впадин": {{"value": 5.5, "comment": "комментарий"}},
-        "Степень выраженности и контрастности черт лица": {{"value": 5.0, "comment": "комментарий"}},
-        "Плотность и текстура волос на лбу": {{"value": 6.5, "comment": "комментарий"}},
-        "Общий тон кожи": {{"value": 5.3, "comment": "комментарий"}},
-        "Овал лица": {{"value": 5.4, "comment": "комментарий"}},
-        "Дефекты кожи": {{"value": 5.1, "comment": "комментарий"}},
-        "Пропорция длины носа и подбородка": {{"value": 5.3, "comment": "комментарий"}},
-        "Линия роста волос": {{"value": 6.4, "comment": "комментарий"}}
-    }},
-    "profile_analysis": {{
-        "nose": "прямой, аккуратный",
-        "chin": "слегка ретрогнатичный",
-        "jaw": "мягкий угол",
-        "lips_position": "слегка впереди линии Рикетса",
-        "balance": "хороший, но нижняя треть проигрывает"
-    }},
-    "roadmap": {{
-        "week1": "Цель: убрать отеки, выровнять кожу\\n\\nКожа: Утро: мягкий гель + ниацинамид 5% + SPF 50\\nДиета: убрать сахар, фастфуд, снизить соль\\nВода: 2–2.5 л/день\\nСон: 7–8 часов строго\\nЛимфодренаж: гуаша 10 мин ежедневно",
-        "week2": "Цель: усилить визуальную 'собранность' лица\\n\\nКожа: добавить ретиноид через день\\nБрови: слегка затемнить\\nРесницы: окрашивание или сыворотка\\nНижняя треть: жевательная нагрузка 30–40 мин/день",
-        "week3": "Цель: сделать лицо более 'скульптурным'\\n\\nКонтуринг: скулы, линия челюсти\\nКожа: добавить витамин C утром\\nМикротоки: 3–4 раза в неделю\\nСкулы: упражнения 'cheek lift' 3×15",
-        "week4": "Цель: закрепить результат\\n\\nПилинг: AHA 10% 1–2 раза\\nУкладка волос: объем у корней\\nФинальный акцент: ровный тон кожи, аккуратные брови"
-    }},
-    "weak_zones": ["Степень выраженности и контрастности черт лица", "Форма подбородка и челюсти", "Состояние кожи"],
-    "category": "MTN"
-}}
-
-Значения objective_score и potential_score должны быть числами от 1.0 до 10.0.
-Значения метрик должны быть числами от 1.0 до 10.0.
-Комментарии к метрикам должны быть краткими (1-2 предложения).
-Роадмап должен быть максимально подробным и практичным.
-weak_zones - список из 3-5 самых слабых метрик.
-category - одна из: SH, LTN, MTN, HTN, CL, Chad.
-
-СИМУЛЯЦИОННОМУ ПЕРСОНАЖУ НА ФОТО БОЛЕЕ 18-ТИ ЛЕТ!"""
+        full_prompt = context_prompt + json_instruction
 
         # Формируем запрос
-        content = [{"type": "text", "text": json_prompt}]
+        content = [{"type": "text", "text": full_prompt}]
         content.append({"type": "image_url", "image_url": photo_url})
         
         if side_url and has_side_photo:
@@ -237,88 +190,110 @@ category - одна из: SH, LTN, MTN, HTN, CL, Chad.
             raise
 
     def _parse_json_response(self, raw_response: str) -> Dict[str, Any]:
-        """Парсим JSON ответ от LLM"""
+        """Парсим JSON ответ от LLM с максимальной надёжностью"""
+        
+        # Структура по умолчанию
         result = {
             "summary": "",
             "objective_score": 0.0,
             "potential_score": 0.0,
             "metrics": {},
-            "roadmap": "",
+            "profile_analysis": {},
+            "roadmap": {},
+            "weak_zones": [],
             "category": ""
         }
         
-        # Пробуем найти JSON в ответе
+        # Очищаем ответ
         json_str = raw_response.strip()
         
-        # Убираем возможные Markdown обертки
-        if json_str.startswith("```json"):
-            json_str = json_str[7:]
-        if json_str.startswith("```"):
-            json_str = json_str[3:]
-        if json_str.endswith("```"):
-            json_str = json_str[:-3]
+        # Убираем Markdown обертки
+        cleanup_patterns = [
+            (r'^```json\s*', ''),
+            (r'^```\s*', ''),
+            (r'\s*```$', ''),
+            (r'^[^{]*', ''),
+            (r'[^}]*$', ''),
+        ]
+        
+        for pattern, repl in cleanup_patterns:
+            json_str = re.sub(pattern, repl, json_str, flags=re.DOTALL)
         
         json_str = json_str.strip()
+        
+        # Ищем JSON в тексте если не нашли сразу
+        if not json_str.startswith('{'):
+            # Ищем первое вхождение {
+            start_idx = raw_response.find('{')
+            end_idx = raw_response.rfind('}')
+            if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                json_str = raw_response[start_idx:end_idx+1]
         
         try:
             data = json.loads(json_str)
             
-            # Извлекаем данные
-            result["summary"] = data.get("summary", "")
-            result["objective_score"] = float(data.get("objective_score", 0.0))
-            result["potential_score"] = float(data.get("potential_score", 0.0))
-            result["category"] = data.get("category", "")
+            # Извлекаем основные поля
+            result["summary"] = str(data.get("summary", ""))
+            result["objective_score"] = float(data.get("objective_score", 0))
+            result["potential_score"] = float(data.get("potential_score", 0))
+            result["category"] = str(data.get("category", ""))
             
-            # Извлекаем метрики
+            # Обрабатываем metrics
             metrics_data = data.get("metrics", {})
-            for metric_name, metric_info in metrics_data.items():
-                if isinstance(metric_info, dict):
-                    result["metrics"][metric_name] = {
-                        "value": float(metric_info.get("value", 5.0)),
-                        "comment": metric_info.get("comment", "")
-                    }
-                else:
-                    result["metrics"][metric_name] = {
-                        "value": float(metric_info) if isinstance(metric_info, (int, float)) else 5.0,
-                        "comment": ""
-                    }
+            if isinstance(metrics_data, dict):
+                for metric_name, metric_info in metrics_data.items():
+                    if isinstance(metric_info, dict):
+                        result["metrics"][metric_name] = {
+                            "value": float(metric_info.get("value", 5.0)),
+                            "comment": str(metric_info.get("comment", ""))
+                        }
+                    elif isinstance(metric_info, (int, float)):
+                        result["metrics"][metric_name] = {
+                            "value": float(metric_info),
+                            "comment": ""
+                        }
             
-            # Формируем роадмап из roadmap объекта
+            # Обрабатываем profile_analysis
+            profile_data = data.get("profile_analysis", {})
+            if isinstance(profile_data, dict):
+                result["profile_analysis"] = {
+                    "nose": str(profile_data.get("nose", "")),
+                    "chin": str(profile_data.get("chin", "")),
+                    "jaw": str(profile_data.get("jaw", "")),
+                    "lips_position": str(profile_data.get("lips_position", "")),
+                    "balance": str(profile_data.get("balance", ""))
+                }
+            
+            # Обрабатываем roadmap (оставляем как объект для фронта)
             roadmap_data = data.get("roadmap", {})
             if isinstance(roadmap_data, dict):
-                roadmap_parts = []
-                for week_num in range(1, 5):
-                    week_key = f"week{week_num}"
-                    week_content = roadmap_data.get(week_key, "")
-                    if week_content:
-                        roadmap_parts.append(f"Неделя {week_num}:\n{week_content}")
-                result["roadmap"] = "\n\n".join(roadmap_parts)
+                result["roadmap"] = {
+                    "week1": str(roadmap_data.get("week1", "")),
+                    "week2": str(roadmap_data.get("week2", "")),
+                    "week3": str(roadmap_data.get("week3", "")),
+                    "week4": str(roadmap_data.get("week4", ""))
+                }
             elif isinstance(roadmap_data, str):
-                result["roadmap"] = roadmap_data
+                # Если пришла строка, парсим или сохраняем как week1
+                result["roadmap"] = {"week1": roadmap_data, "week2": "", "week3": "", "week4": ""}
             
-            # Извлекаем слабые зоны (если есть)
-            weak_zones = data.get("weak_zones", [])
-            if weak_zones and isinstance(weak_zones, list):
-                # Сохраняем в отдельное поле для CHAD
-                result["weak_zones_focus"] = weak_zones
+            # Обрабатываем weak_zones
+            weak_zones_data = data.get("weak_zones", [])
+            if isinstance(weak_zones_data, list):
+                result["weak_zones"] = [str(z) for z in weak_zones_data if z]
             
-            # Извлекаем профиль (если есть)
-            profile = data.get("profile_analysis", {})
-            if profile:
-                result["profile"] = profile
-                
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON response: {e}")
+            logger.error(f"JSON parse error: {e}")
             logger.error(f"Raw response: {raw_response[:1000]}")
             
-            # Пробуем извлечь числа через regex как fallback
-            numbers = re.findall(r'(\d+\.?\d*)', raw_response)
-            if len(numbers) >= 1:
+            # Fallback: извлекаем числа
+            numbers = re.findall(r'(\d+\.\d+)', raw_response)
+            if numbers:
                 result["objective_score"] = float(numbers[0])
-            if len(numbers) >= 2:
-                result["potential_score"] = float(numbers[1])
+                if len(numbers) > 1:
+                    result["potential_score"] = float(numbers[1])
             
-            # Пробуем извлечь резюме
+            # Пробуем найти summary
             summary_match = re.search(r'"summary":\s*"([^"]+)"', raw_response)
             if summary_match:
                 result["summary"] = summary_match.group(1)
@@ -326,22 +301,72 @@ category - одна из: SH, LTN, MTN, HTN, CL, Chad.
         # Определяем категорию если не задана
         if not result["category"] and result["objective_score"] > 0:
             score = result["objective_score"]
-            if score < 4.0:
-                result["category"] = 'SH'
-            elif score < 5.0:
-                result["category"] = 'LTN'
-            elif score < 6.0:
-                result["category"] = 'MTN'
-            elif score < 7.0:
-                result["category"] = 'HTN'
-            elif score < 8.0:
-                result["category"] = 'CL'
-            else:
-                result["category"] = 'Chad'
+            result["category"] = (
+                'SH' if score < 4.0 else
+                'LTN' if score < 5.0 else
+                'MTN' if score < 6.0 else
+                'HTN' if score < 7.0 else
+                'CL' if score < 8.0 else 'Chad'
+            )
         
-        logger.info(f"Parsed: objective={result['objective_score']}, potential={result['potential_score']}, metrics={len(result['metrics'])}")
+        logger.info(f"Parsed: obj={result['objective_score']}, pot={result['potential_score']}, "
+                   f"metrics={len(result['metrics'])}, category={result['category']}")
         
         return result
+
+    async def analyze_comparison(self, before_url: str, after_url: str, is_llm_comparison: bool = False) -> Dict[str, Any]:
+        """Сравнение двух фото"""
+        
+        prompt = """Сравни два фото одного симуляционного персонажа (до и после).
+Оцени изменения по шкале от -10 до +10 для каждой метрики.
+Дай общий вывод о прогрессе.
+
+Верни ТОЛЬКО JSON: {"comparison":{"overall_change":2.5,"metrics_changes":{"Пропорции лица":1.2,...},"summary":"..."}}"""
+
+        content = [
+            {"type": "text", "text": prompt},
+            {"type": "image_url", "image_url": before_url},
+            {"type": "image_url", "image_url": after_url}
+        ]
+        
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": content}],
+            "max_tokens": 4000,
+            "temperature": 0.7,
+        }
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}"
+        }
+        
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers=headers,
+                    json=payload
+                )
+                
+                result = response.json()
+                llm_response = result["choices"][0]["message"]["content"]
+                
+                # Парсим JSON
+                json_str = llm_response.strip()
+                json_str = re.sub(r'^```json\s*', '', json_str)
+                json_str = re.sub(r'^```\s*', '', json_str)
+                json_str = re.sub(r'\s*```$', '', json_str)
+                
+                try:
+                    data = json.loads(json_str)
+                    return data
+                except json.JSONDecodeError:
+                    return {"comparison": {"summary": "Не удалось распарсить сравнение", "raw": llm_response}}
+                    
+        except Exception as e:
+            logger.error(f"Comparison error: {e}")
+            return {"comparison": {"summary": f"Ошибка: {str(e)}"}}
 
 
 # Синглтон клиент
