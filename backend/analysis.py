@@ -30,43 +30,23 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 def compress_image(file: UploadFile) -> BytesIO:
-    """Сжимает изображение сохраняя качество для анализа лица"""
+    """Минимальное сжатие для сохранения качества"""
     image = Image.open(file.file)
-
+    
     if image.mode in ('RGBA', 'P'):
         image = image.convert('RGB')
-
-    # НЕ уменьшаем размер — сохраняем оригинальное разрешение
-    # Только если фото огромное (>2000px), тогда немного уменьшаем
-    max_size = 1600
-    if max(image.size) > max_size:
-        ratio = max_size / max(image.size)
+    
+    # Не ресайзим, только если > 3000px
+    if max(image.size) > 3000:
+        ratio = 3000 / max(image.size)
         new_size = (int(image.size[0] * ratio), int(image.size[1] * ratio))
         image = image.resize(new_size, Image.Resampling.LANCZOS)
-        logger.info(f"[IMAGE] Resized: {image.size[0]}x{image.size[1]}")
-
+    
     output = BytesIO()
-    
-    # Пробуем качество от 95 до 85 пока не уложимся в лимит
-    for quality in [95, 90, 85, 80]:
-        output.seek(0)
-        output.truncate()
-        image.save(output, format='JPEG', quality=quality, optimize=True)
-        
-        size_kb = len(output.getvalue()) / 1024
-        logger.info(f"[IMAGE] Quality {quality}: {size_kb:.0f}KB")
-        
-        # Цель: 1.5MB максимум, но желательно >300KB для качества
-        if size_kb < 1500:
-            break
-    
+    image.save(output, format='JPEG', quality=95, optimize=False)
     output.seek(0)
-
-    original_size = getattr(file, 'size', 0) or 0
-    compressed_size = len(output.getvalue())
-    logger.info(f"[IMAGE] Compressed: {original_size // 1024}KB → {compressed_size // 1024}KB "
-                f"({compressed_size/original_size*100:.0f}%)")
-
+    
+    logger.info(f"[IMAGE] Saved: {len(output.getvalue())//1024}KB, size={image.size}")
     return output
 
 

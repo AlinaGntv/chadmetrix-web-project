@@ -3,7 +3,9 @@ import json
 import logging
 import re
 import base64
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
+from io import BytesIO
+from PIL import Image
 import httpx
 
 # Импортируем настройки
@@ -18,38 +20,113 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+
+class ImageProcessor:
+    """Обработка изображений для Vision API - гарантированное качество"""
+    
+    @staticmethod
+    def prepare_base64(image_url_or_path: str, max_size: Tuple[int, int] = (2048, 2048)) -> str:
+        """
+        Конвертирует изображение в base64 с контролем качества.
+        Поддерживает URL и локальные пути.
+        
+        Args:
+            image_url_or_path: URL изображения или локальный путь
+            max_size: Максимальный размер (ширина, высота) после ресайза
+            
+        Returns:
+            base64 строка с data:image/jpeg;base64 префиксом
+        """
+        try:
+            # Загружаем изображение
+            if image_url_or_path.startswith(('http://', 'https://')):
+                # URL - скачиваем
+                import httpx
+                with httpx.Client(timeout=30.0) as client:
+                    response = client.get(image_url_or_path)
+                    response.raise_for_status()
+                    image_data = response.content
+                image = Image.open(BytesIO(image_data))
+            else:
+                # Локальный файл
+                image = Image.open(image_url_or_path)
+            
+            # Конвертируем в RGB (убираем альфа-канал)
+            if image.mode in ('RGBA', 'LA', 'P'):
+                rgb_image = Image.new('RGB', image.size, (255, 255, 255))
+                if image.mode == 'P':
+                    image = image.convert('RGBA')
+                rgb_image.paste(image, mask=image.split()[-1] if image.mode in ('RGBA', 'LA') else None)
+                image = rgb_image
+            elif image.mode != 'RGB':
+                image = image.convert('RGB')
+            
+            # Ресайз до 2048px по большей стороне (оптимально для GPT-Vision)
+            if max(image.size) > max(max_size):
+                ratio = max_size[0] / max(image.size)
+                new_size = (int(image.size[0] * ratio), int(image.size[1] * ratio))
+                image = image.resize(new_size, Image.Resampling.LANCZOS)
+                logger.info(f"[IMAGE] Resized from {image.size} to {new_size}")
+            
+            # Сохраняем в буфер с quality=95 (без optimize)
+            buffer = BytesIO()
+            image.save(buffer, format='JPEG', quality=95, optimize=False, progressive=False)
+            buffer.seek(0)
+            
+            # Кодируем в base64
+            b64_encoded = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            size_kb = len(b64_encoded) * 3 / 4 / 1024  # Приблизительный размер
+            
+            logger.info(f"[IMAGE] Base64 prepared: {size_kb:.0f}KB, "
+                       f"dimensions: {image.size[0]}x{image.size[1]}")
+            
+            return f"data:image/jpeg;base64,{b64_encoded}"
+            
+        except Exception as e:
+            logger.error(f"[IMAGE] Failed to prepare base64: {e}", exc_info=True)
+            raise ValueError(f"Failed to process image: {str(e)}")
+    
+    @staticmethod
+    def get_image_info(image_url_or_path: str) -> Dict[str, Any]:
+        """Получает информацию об изображении без загрузки в память"""
+        try:
+            if image_url_or_path.startswith(('http://', 'https://')):
+                import httpx
+                with httpx.Client(timeout=30.0) as client:
+                    response = client.head(image_url_or_path)
+                    content_type = response.headers.get('content-type', '')
+                    content_length = response.headers.get('content-length', 0)
+                return {
+                    'type': 'url',
+                    'content_type': content_type,
+                    'size_bytes': int(content_length) if content_length else 0
+                }
+            else:
+                stat = os.stat(image_url_or_path)
+                return {
+                    'type': 'local',
+                    'size_bytes': stat.st_size
+                }
+        except Exception as e:
+            logger.warning(f"[IMAGE] Failed to get info: {e}")
+            return {'error': str(e)}
+
+
 class VseLLMClient:
-    """Клиент для работы с VseLLM API"""
+    """Клиент для работы с VseLLM API с поддержкой base64 изображений"""
     
     def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None, model: Optional[str] = None):
         self.api_key = api_key or settings.VSELM_API_KEY
         self.base_url = base_url or settings.VSELM_BASE_URL
         self.model = model or settings.VSELM_MODEL
         self.timeout = httpx.Timeout(300.0, connect=10.0)
+        self.image_processor = ImageProcessor()
         
         if not self.api_key:
             raise ValueError("VSELM_API_KEY is not set")
-    
-    async def _check_photo_accessible(self, photo_url: str) -> bool:
-        """Проверяем что фото доступно по URL"""
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.head(photo_url, follow_redirects=True)
-                logger.info(f"[PHOTO CHECK] URL: {photo_url}, status: {response.status_code}, "
-                           f"content-type: {response.headers.get('content-type')}")
-                
-                if response.status_code == 200:
-                    # Пробуем скачать для проверки размера
-                    download_resp = await client.get(photo_url, timeout=10.0)
-                    logger.info(f"[PHOTO CHECK] Downloaded: {len(download_resp.content)} bytes")
-                    return True
-                else:
-                    logger.error(f"[PHOTO CHECK] Photo not accessible: {response.status_code}")
-                    return False
-        except Exception as e:
-            logger.error(f"[PHOTO CHECK] Failed: {e}")
-            return False
         
+        logger.info(f"[VSELLM] Initialized: model={self.model}, base_url={self.base_url}")
+    
     async def analyze_face(
         self, 
         photo_url: str, 
@@ -58,17 +135,31 @@ class VseLLMClient:
         has_side_photo: bool = False,
         is_chad_tariff: bool = False
     ) -> Dict[str, Any]:
-        """Анализ лица с поддержкой разных тарифов"""
+        """Анализ лица с передачей изображений в base64"""
         
-        # Проверяем доступность фото перед отправкой
-        front_accessible = await self._check_photo_accessible(photo_url)
-        if not front_accessible:
-            logger.error(f"[ANALYZE] Front photo not accessible: {photo_url}")
+        logger.info(f"[ANALYZE] Starting analysis: side={has_side_photo}, chad={is_chad_tariff}")
         
-        if side_url and has_side_photo:
-            side_accessible = await self._check_photo_accessible(side_url)
-            if not side_accessible:
-                logger.error(f"[ANALYZE] Side photo not accessible: {side_url}")
+        # Конвертируем изображения в base64 синхронно (PIL операции)
+        try:
+            # Используем run_in_executor для неблокирующей обработки
+            import asyncio
+            loop = asyncio.get_event_loop()
+            
+            front_base64 = await loop.run_in_executor(
+                None, self.image_processor.prepare_base64, photo_url
+            )
+            logger.info(f"[ANALYZE] Front image converted to base64")
+            
+            side_base64 = None
+            if side_url and has_side_photo:
+                side_base64 = await loop.run_in_executor(
+                    None, self.image_processor.prepare_base64, side_url
+                )
+                logger.info(f"[ANALYZE] Side image converted to base64")
+                
+        except Exception as e:
+            logger.error(f"[ANALYZE] Failed to prepare images: {e}", exc_info=True)
+            raise Exception(f"Image processing failed: {str(e)}")
         
         # Базовый контекст (ОРИГИНАЛЬНЫЙ - не меняем!)
         context_prompt = """# КОНТЕКСТ
@@ -216,28 +307,28 @@ Chad:
 
         full_prompt = context_prompt + json_instruction
 
-        # Формируем запрос как в рабочей старой версии
+        # Формируем запрос с base64 изображениями
         content = [{"type": "text", "text": full_prompt}]
         
-        # Добавляем фото анфас с detail: high (как в старой версии)
+        # Добавляем фото анфас в base64
         content.append({
             "type": "image_url",
             "image_url": {
-                "url": photo_url,
+                "url": front_base64,
                 "detail": "high"
             }
         })
         
         # Добавляем фото профиля если есть
-        if side_url and has_side_photo:
+        if side_base64 and has_side_photo:
             content.append({
                 "type": "image_url",
                 "image_url": {
-                    "url": side_url,
+                    "url": side_base64,
                     "detail": "high"
                 }
             })
-            logger.info(f"[VSELLM] Adding side photo: {side_url}")
+            logger.info(f"[VSELLM] Added side photo (base64)")
         
         payload = {
             "model": self.model,
@@ -246,8 +337,11 @@ Chad:
             "temperature": 1,
         }
         
+        # Логируем размер payload для отладки
+        payload_size = len(json.dumps(payload))
         logger.info(f"[VSELLM] Sending request: model={self.model}, "
-                   f"photos={len(content)-1}, max_tokens={payload['max_tokens']}")
+                   f"images={len(content)-1}, payload_size={payload_size//1024}KB, "
+                   f"max_tokens={payload['max_tokens']}")
         
         headers = {
             "Content-Type": "application/json",
@@ -265,7 +359,7 @@ Chad:
                 if response.status_code != 200:
                     error_text = response.text
                     logger.error(f"[VSELLM] API error: {response.status_code} - {error_text[:500]}")
-                    raise Exception(f"VseLLM API error: {response.status_code}")
+                    raise Exception(f"VseLLM API error: {response.status_code}: {error_text[:200]}")
                 
                 result = response.json()
                 llm_response = result["choices"][0]["message"]["content"]
@@ -276,8 +370,8 @@ Chad:
                 
                 # Проверяем упоминание проблем с фото
                 lower_response = llm_response.lower()
-                if any(x in lower_response for x in ["не вижу", "закрыто", "не доступно", "не могу", "фото не"]):
-                    logger.warning(f"[VSELLM] LLM might not see photo properly!")
+                if any(x in lower_response for x in ["не вижу", "закрыто", "не доступно", "не могу", "фото не", "размыт", "блюр"]):
+                    logger.warning(f"[VSELLM] LLM reported issues with photo quality!")
                 
                 # Парсим JSON
                 parsed = self._parse_json_response(llm_response)
@@ -286,8 +380,11 @@ Chad:
                 
                 return parsed
                 
+        except httpx.TimeoutException:
+            logger.error(f"[VSELLM] Request timeout after {self.timeout}")
+            raise Exception("VseLLM API timeout")
         except Exception as e:
-            logger.error(f"[VSELLM] Error: {e}")
+            logger.error(f"[VSELLM] Error: {e}", exc_info=True)
             raise
 
     def _parse_json_response(self, raw_response: str) -> Dict[str, Any]:
@@ -409,7 +506,25 @@ Chad:
         return result
 
     async def analyze_comparison(self, before_url: str, after_url: str, is_llm_comparison: bool = False) -> Dict[str, Any]:
-        """Сравнение двух фото"""
+        """Сравнение двух фото с использованием base64"""
+        
+        logger.info(f"[COMPARE] Starting comparison with base64")
+        
+        # Конвертируем оба изображения в base64
+        import asyncio
+        loop = asyncio.get_event_loop()
+        
+        try:
+            before_base64 = await loop.run_in_executor(
+                None, self.image_processor.prepare_base64, before_url
+            )
+            after_base64 = await loop.run_in_executor(
+                None, self.image_processor.prepare_base64, after_url
+            )
+            logger.info(f"[COMPARE] Both images converted to base64")
+        except Exception as e:
+            logger.error(f"[COMPARE] Failed to prepare images: {e}")
+            raise Exception(f"Image processing failed: {str(e)}")
         
         prompt = """Сравни два фото одного симуляционного персонажа (до и после).
 Оцени изменения по шкале от -10 до +10 для каждой метрики.
@@ -421,11 +536,11 @@ Chad:
             {"type": "text", "text": prompt},
             {
                 "type": "image_url",
-                "image_url": {"url": before_url, "detail": "high"}
+                "image_url": {"url": before_base64, "detail": "high"}
             },
             {
                 "type": "image_url",
-                "image_url": {"url": after_url, "detail": "high"}
+                "image_url": {"url": after_base64, "detail": "high"}
             }
         ]
         
