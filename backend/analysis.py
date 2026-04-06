@@ -225,7 +225,9 @@ async def _process_analysis(analysis_id: str, front_url: str, side_url: str | No
 
         analysis.metrics = json.dumps(result.get('metrics', {}))
 
-        weak_zones = [k for k, v in result.get('metrics', {}).items() if isinstance(v, dict) and v.get('value', 0) < 5]
+        weak_zones = result.get('weak_zones_focus', [])
+        if not weak_zones:
+            weak_zones = [k for k, v in result.get('metrics', {}).items() if isinstance(v, dict) and v.get('value', 0) < 5]
         analysis.weak_zones = json.dumps(weak_zones)
 
         user = db.query(User).filter(User.id == user_id).first()
