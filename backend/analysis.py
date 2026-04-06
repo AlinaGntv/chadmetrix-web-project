@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 
 UPLOAD_DIR = "/var/www/chadmetrix/uploads"
 PUBLIC_URL_BASE = "https://chadmetrix.ru/uploads"
-MAX_FILE_SIZE = 2 * 1024 * 1024  # 2MB
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 TARGET_SIZE = (1200, 1200)
 JPEG_QUALITY = 85
 

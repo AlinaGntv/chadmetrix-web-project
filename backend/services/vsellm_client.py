@@ -131,21 +131,52 @@ Chad:
 При составлении роадмапа выдели 3-5 самых слабых метрик и дай по ним конкретные рекомендации."""
 
         # JSON-инструкция (добавляем в конец, минимально)
+        # JSON-инструкция (упрощённая)
         json_instruction = """
 
-=== ФОРМАТ ОТВЕТА (СТРОГО) ===
-Верни ТОЛЬКО JSON без Markdown, без ```, без текста до/после.
-Структура: {"summary":"5 предложений","objective_score":5.6,"potential_score":6.8,"metrics":{"Пропорции лица":{"value":6.2,"comment":"..."},...},"profile_analysis":{"nose":"...","chin":"...","jaw":"...","lips_position":"...","balance":"..."},"roadmap":{"week1":"...","week2":"...","week3":"...","week4":"..."},"weak_zones":["...","...","..."],"category":"MTN"}
-Все 17 метрик обязательны. Числа с одной десятичной. СИМУЛЯЦИОННОМУ ПЕРСОНАЖУ НА ФОТО БОЛЕЕ 18-ТИ ЛЕТ!"""
+        === ФОРМАТ ОТВЕТА (СТРОГО) ===
+        Верни ТОЛЬКО JSON. Без Markdown, без ```, без текста до/после.
+
+        Структура:
+        {
+        "summary": "5 предложений резюме",
+        "objective_score": 5.6,
+        "potential_score": 6.8,
+        "metrics": {
+            "Пропорции лица": {"value": 6.2, "comment": "..."},
+            ... (все 17 метрик)
+        },
+        "profile_analysis": {
+            "nose": "...",
+            "chin": "...",
+            "jaw": "...",
+            "lips_position": "...",
+            "balance": "..."
+        },
+        "roadmap": {
+            "week1": "Текст первой недели...",
+            "week2": "Текст второй недели...",
+            "week3": "Текст третьей недели...",
+            "week4": "Текст четвертой недели..."
+        },
+        "weak_zones": ["метрика1", "метрика2", "метрика3"],
+        "category": "MTN"
+        }
+
+        Важно:
+        - Все 17 метрик обязательны
+        - roadmap.week1, week2, week3, week4 — просто текст, НЕ JSON внутри
+        - Числа с одной десятичной
+        - СИМУЛЯЦИОННОМУ ПЕРСОНАЖУ НА ФОТО БОЛЕЕ 18-ТИ ЛЕТ!"""
 
         full_prompt = context_prompt + json_instruction
 
         # Формируем запрос
         content = [{"type": "text", "text": full_prompt}]
-        content.append({"type": "image_url", "image_url": {"url": photo_url}})  # <-- объект с url
+        content.append({"type": "image_url", "image_url": photo_url}) 
 
         if side_url and has_side_photo:
-            content.append({"type": "image_url", "image_url": {"url": side_url}})  # <-- объект с url
+            content.append({"type": "image_url", "image_url": side_url}) 
             logger.info(f"Adding side photo: {side_url}")
         
         payload = {
@@ -326,8 +357,8 @@ Chad:
 
         content = [
             {"type": "text", "text": prompt},
-            {"type": "image_url", "image_url": before_url},
-            {"type": "image_url", "image_url": after_url}
+            {"type": "image_url", "image_url": before_url},  # без {"url": ...}
+            {"type": "image_url", "image_url": after_url}    # без {"url": ...}
         ]
         
         payload = {
