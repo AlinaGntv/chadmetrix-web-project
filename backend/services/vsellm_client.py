@@ -142,10 +142,10 @@ Chad:
 
         # Формируем запрос
         content = [{"type": "text", "text": full_prompt}]
-        content.append({"type": "image_url", "image_url": photo_url})
-        
+        content.append({"type": "image_url", "image_url": {"url": photo_url}})  # <-- объект с url
+
         if side_url and has_side_photo:
-            content.append({"type": "image_url", "image_url": side_url})
+            content.append({"type": "image_url", "image_url": {"url": side_url}})  # <-- объект с url
             logger.info(f"Adding side photo: {side_url}")
         
         payload = {
@@ -169,8 +169,9 @@ Chad:
                 )
                 
                 if response.status_code != 200:
-                    logger.error(f"API error: {response.status_code}")
-                    raise Exception(f"API error: {response.status_code}")
+                    error_text = await response.aread()
+                    logger.error(f"API error: {response.status_code}, body: {error_text[:500]}")
+                    raise Exception(f"API error: {response.status_code}, details: {error_text[:200]}")
                 
                 result = response.json()
                 llm_response = result["choices"][0]["message"]["content"]
