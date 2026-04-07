@@ -1,4 +1,3 @@
-// app/reports/page.tsx
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -9,13 +8,14 @@ import { getReports } from "@/lib/api";
 import Link from "next/link";
 import { useAuth } from "@/lib/hooks/useAuth";
 
-// Интерфейс на основе моделей БД
+// Интерфейс на основе реального ответа API
 interface ReportData {
     id: string;
-    report?: {
-        overall_score?: number;
-    } | null;
+    overall_score?: number | null;
+    potential_score?: number | null;
     created_at?: string;
+    updated_at?: string;
+    tariff?: string;
 }
 
 interface Report {
@@ -43,11 +43,12 @@ export default function ReportsPage() {
     useEffect(() => {
         const fetchReports = async () => {
             try {
-                const data: ReportData[] = await getReports();
+                const data = await getReports() as ReportData[];
                 // Преобразуем данные из API в нужный формат
-                const formatted: Report[] = data.map((item) => ({
+                const formatted: Report[] = data.map((item: ReportData) => ({
                     id: item.id,
-                    score: item.report?.overall_score || 0,
+                    // Берём overall_score напрямую из корня объекта
+                    score: item.overall_score ?? 0,
                     date: item.created_at || new Date().toISOString(),
                 }));
                 setReports(formatted);
