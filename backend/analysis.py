@@ -585,21 +585,26 @@ def get_analyses_for_comparison(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Получить анализы для сравнения"""
+    """Получить анализы для страницы сравнения (только завершенные с overall_score)"""
     analyses = db.query(Analysis).filter(
         Analysis.user_id == current_user.id,
-        Analysis.is_deleted == False
+        Analysis.is_deleted == False,
+        Analysis.report_id.isnot(None)  # Только с отчетом
     ).order_by(desc(Analysis.created_at)).all()
     
     result = []
     for analysis in analyses:
         report = db.query(Report).filter(Report.id == analysis.report_id).first()
+        # Пропускаем если нет отчета или overall_score
+        if not report or report.overall_score is None:
+            continue
+            
         photos = json.loads(analysis.photos) if analysis.photos else []
         
         result.append({
             "id": analysis.id,
             "created_at": analysis.created_at.isoformat(),
-            "overall_score": float(report.overall_score) if report and report.overall_score else None,
+            "overall_score": float(report.overall_score),
             "photos": photos
         })
     

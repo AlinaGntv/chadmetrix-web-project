@@ -8,22 +8,16 @@ import { api } from "@/lib/api";
 import { Loader2, BarChart3, Brain, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import Image from "next/image";
 
-// Интерфейс для данных из API /reports/for-comparison
-interface ReportForComparison {
+// Интерфейс для данных из API /analysis/for-comparison
+interface AnalysisFromAPI {
     id: string;
-    analysis_id: string | null;
-    tariff: string;
-    overall_score: number | null;
-    potential_score: number | null;
-    category: string;
-    photos: string[];
     created_at: string;
-    metrics: Record<string, unknown> | null;
+    overall_score: number;
+    photos: string[];
 }
 
-interface ReportsForComparisonResponse {
-    reports: ReportForComparison[];
-    tariff_type: string;
+interface AnalysesForComparisonResponse {
+    analyses: AnalysisFromAPI[];
     total: number;
 }
 
@@ -95,18 +89,16 @@ export default function ComparePage() {
 
     const fetchAnalyses = async (): Promise<void> => {
         try {
-            const response = await api.get("/analysis/for-comparison");
+            const response = await api.get<AnalysesForComparisonResponse>("/analysis/for-comparison");
             const data = response.data;
 
-            // Преобразуем данные в формат, который ожидает компонент (без any!)
-            const formattedAnalyses: Analysis[] = data.reports
-                .filter((report: ReportForComparison) => report.overall_score !== null)
-                .map((report: ReportForComparison) => ({
-                    id: report.analysis_id || report.id,
-                    created_at: report.created_at,
-                    overall_score: report.overall_score,
-                    photos: report.photos || []
-                }));
+            // Преобразуем данные в формат компонента
+            const formattedAnalyses: Analysis[] = data.analyses.map((analysis: AnalysisFromAPI) => ({
+                id: analysis.id,
+                created_at: analysis.created_at,
+                overall_score: analysis.overall_score,
+                photos: analysis.photos || []
+            }));
 
             setAnalyses(formattedAnalyses);
         } catch (error) {
