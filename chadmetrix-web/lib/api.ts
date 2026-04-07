@@ -124,3 +124,9 @@ export async function getReferralStats() {
     const response = await api.get("/referrals/stats");
     return response.data;
 }
+
+// REPORTS FOR COMPARISON
+export async function getReportsForComparison() {
+    const response = await api.get("/reports/for-comparison");
+    return response.data;
+}

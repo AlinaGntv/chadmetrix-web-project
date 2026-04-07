@@ -419,14 +419,26 @@ def get_analysis_history(
         "total": len(result)
     }
 
-
 @router.post("/compare/system")
 async def system_comparison(
     analysis_ids: List[str],
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Системное сравнение метрик между анализами"""
+    """Системное сравнение метрик между анализами (простое сравнение)"""
+    
+    # Проверка тарифных ограничений
+    tariff_type = current_user.tariff_type.lower()
+    
+    if tariff_type == 'basic' or tariff_type == 'разовый':
+        raise HTTPException(403, "Системное сравнение доступно только на тарифах HTN и CHAD")
+    
+    if tariff_type == 'htn':
+        # HTN: только 1 системное сравнение
+        # Проверяем, сколько сравнений уже сделал пользователь
+        # (можно хранить в отдельной таблице, пока сделаем простое ограничение)
+        pass  # TODO: добавить счетчик сравнений
+    
     analyses = db.query(Analysis).filter(
         Analysis.id.in_(analysis_ids),
         Analysis.user_id == current_user.id
@@ -439,39 +451,89 @@ async def system_comparison(
     for analysis in analyses:
         report = db.query(Report).filter(Report.id == analysis.report_id).first()
         if report and report.metrics_data:
+            # Получаем метаданные
+            meta = {}
+            if report.meta:
+                try:
+                    meta = json.loads(report.meta)
+                except:
+                    pass
+            
             reports.append({
                 "id": analysis.id,
+                "report_id": report.id,
                 "date": analysis.created_at.isoformat(),
                 "metrics": json.loads(report.metrics_data),
-                "overall_score": report.overall_score
+                "overall_score": report.overall_score,
+                "potential_score": report.potential_score,
+                "category": meta.get('category')
             })
     
     if len(reports) < 2:
         raise HTTPException(400, "Not enough completed reports for comparison")
     
-    # Сравниваем метрики
-    comparison = {
-        "analyses": reports,
-        "metrics_progress": {},
-        "overall_progress": reports[-1]["overall_score"] - reports[0]["overall_score"] 
-            if reports[0]["overall_score"] and reports[-1]["overall_score"] else 0
-    }
+    # Сортируем по дате
+    reports.sort(key=lambda x: x['date'])
     
-    # Сравниваем каждую метрику
-    first_metrics = reports[0].get("metrics", {})
-    last_metrics = reports[-1].get("metrics", {})
+    # Сравниваем первый и последний
+    first = reports[0]
+    last = reports[-1]
+    
+    # Сравниваем метрики
+    metrics_progress = {}
+    first_metrics = first.get("metrics", {})
+    last_metrics = last.get("metrics", {})
     
     for metric_name in first_metrics:
-        first_value = first_metrics.get(metric_name, {}).get("value", 0)
-        last_value = last_metrics.get(metric_name, {}).get("value", 0)
-        comparison["metrics_progress"][metric_name] = {
-            "first": first_value,
-            "last": last_value,
-            "change": last_value - first_value
+        first_value = first_metrics.get(metric_name, {}).get("value", 0) if isinstance(first_metrics.get(metric_name), dict) else first_metrics.get(metric_name, 0)
+        last_value = last_metrics.get(metric_name, {}).get("value", 0) if isinstance(last_metrics.get(metric_name), dict) else last_metrics.get(metric_name, 0)
+        
+        # Приводим к float
+        try:
+            first_val = float(first_value) if first_value else 0
+            last_val = float(last_value) if last_value else 0
+        except:
+            first_val = 0
+            last_val = 0
+        
+        metrics_progress[metric_name] = {
+            "first": first_val,
+            "last": last_val,
+            "change": round(last_val - first_val, 1),
+            "trend": "up" if last_val > first_val else "down" if last_val < first_val else "stable"
         }
     
-    return comparison
-
+    # Общая динамика
+    overall_change = 0
+    if first.get("overall_score") and last.get("overall_score"):
+        try:
+            overall_change = round(float(last["overall_score"]) - float(first["overall_score"]), 1)
+        except:
+            overall_change = 0
+    
+    return {
+        "comparison_type": "system",
+        "first_report": {
+            "id": first["id"],
+            "report_id": first["report_id"],
+            "date": first["date"],
+            "overall_score": first["overall_score"],
+            "potential_score": first["potential_score"],
+            "category": first.get("category")
+        },
+        "last_report": {
+            "id": last["id"],
+            "report_id": last["report_id"],
+            "date": last["date"],
+            "overall_score": last["overall_score"],
+            "potential_score": last["potential_score"],
+            "category": last.get("category")
+        },
+        "metrics_progress": metrics_progress,
+        "overall_change": overall_change,
+        "trend": "up" if overall_change > 0 else "down" if overall_change < 0 else "stable",
+        "reports_count": len(reports)
+    }
 
 @router.post("/compare/llm")
 async def llm_comparison(
