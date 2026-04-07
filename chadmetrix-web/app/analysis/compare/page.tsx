@@ -8,6 +8,25 @@ import { api } from "@/lib/api";
 import { Loader2, BarChart3, Brain, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import Image from "next/image";
 
+// Интерфейс для данных из API /reports/for-comparison
+interface ReportForComparison {
+    id: string;
+    analysis_id: string | null;
+    tariff: string;
+    overall_score: number | null;
+    potential_score: number | null;
+    category: string;
+    photos: string[];
+    created_at: string;
+    metrics: Record<string, unknown> | null;
+}
+
+interface ReportsForComparisonResponse {
+    reports: ReportForComparison[];
+    tariff_type: string;
+    total: number;
+}
+
 interface Analysis {
     id: string;
     created_at: string;
@@ -55,11 +74,6 @@ interface LlmComparisonResult {
     comparison: LlmComparisonData;
 }
 
-interface HistoryResponse {
-    analyses: Analysis[];
-    total: number;
-}
-
 export default function ComparePage() {
     const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
     const router = useRouter();
@@ -81,10 +95,20 @@ export default function ComparePage() {
 
     const fetchAnalyses = async (): Promise<void> => {
         try {
-            const response = await api.get("/analysis/history?limit=50");
-            const data = response.data as HistoryResponse;
-            const completedAnalyses = data.analyses.filter((a: Analysis) => a.overall_score !== null);
-            setAnalyses(completedAnalyses);
+            const response = await api.get<ReportsForComparisonResponse>("/reports/for-comparison");
+            const data = response.data;
+
+            // Преобразуем данные в формат, который ожидает компонент (без any!)
+            const formattedAnalyses: Analysis[] = data.reports
+                .filter((report: ReportForComparison) => report.overall_score !== null)
+                .map((report: ReportForComparison) => ({
+                    id: report.analysis_id || report.id,
+                    created_at: report.created_at,
+                    overall_score: report.overall_score,
+                    photos: report.photos || []
+                }));
+
+            setAnalyses(formattedAnalyses);
         } catch (error) {
             console.error("Failed to fetch analyses:", error);
         } finally {
@@ -115,17 +139,17 @@ export default function ComparePage() {
         setIsComparing(true);
         try {
             if (comparisonType === "system") {
-                const response = await api.post("/analysis/compare/system", {
+                const response = await api.post<SystemComparisonResult>("/analysis/compare/system", {
                     analysis_ids: selectedAnalyses
                 });
-                setComparisonResult(response.data as SystemComparisonResult);
+                setComparisonResult(response.data);
             } else {
                 const [beforeId, afterId] = selectedAnalyses;
-                const response = await api.post("/analysis/compare/llm", {
+                const response = await api.post<LlmComparisonResult>("/analysis/compare/llm", {
                     before_analysis_id: beforeId,
                     after_analysis_id: afterId
                 });
-                setComparisonResult(response.data as LlmComparisonResult);
+                setComparisonResult(response.data);
             }
         } catch (error: unknown) {
             console.error("Comparison failed:", error);
@@ -195,8 +219,8 @@ export default function ComparePage() {
                                     type="button"
                                     onClick={() => setComparisonType("system")}
                                     className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${comparisonType === "system"
-                                            ? "bg-white/10 text-white"
-                                            : "text-gray-400 hover:text-white"
+                                        ? "bg-white/10 text-white"
+                                        : "text-gray-400 hover:text-white"
                                         }`}
                                 >
                                     <BarChart3 className="w-4 h-4" />
@@ -208,8 +232,8 @@ export default function ComparePage() {
                                     type="button"
                                     onClick={() => setComparisonType("llm")}
                                     className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${comparisonType === "llm"
-                                            ? "bg-white/10 text-white"
-                                            : "text-gray-400 hover:text-white"
+                                        ? "bg-white/10 text-white"
+                                        : "text-gray-400 hover:text-white"
                                         }`}
                                 >
                                     <Brain className="w-4 h-4" />
@@ -233,8 +257,8 @@ export default function ComparePage() {
                                     key={analysis.id}
                                     onClick={() => handleSelectAnalysis(analysis.id)}
                                     className={`flex items-center justify-between p-4 rounded-lg border cursor-pointer transition-all ${selectedAnalyses.includes(analysis.id)
-                                            ? "border-white/30 bg-white/10"
-                                            : "border-white/10 hover:bg-white/5"
+                                        ? "border-white/30 bg-white/10"
+                                        : "border-white/10 hover:bg-white/5"
                                         }`}
                                 >
                                     <div className="flex items-center gap-4">
