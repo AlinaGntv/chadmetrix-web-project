@@ -8,16 +8,22 @@ import { api } from "@/lib/api";
 import { Loader2, BarChart3, Brain, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import Image from "next/image";
 
-// Интерфейс для данных из API /analysis/for-comparison
-interface AnalysisFromAPI {
+// Интерфейс для данных из API /reports/for-comparison
+interface ReportForComparison {
     id: string;
-    created_at: string;
-    overall_score: number;
+    analysis_id: string | null;
+    tariff: string;
+    overall_score: number | null;
+    potential_score: number | null;
+    category: string;
     photos: string[];
+    created_at: string;
+    metrics: Record<string, unknown> | null;
 }
 
-interface AnalysesForComparisonResponse {
-    analyses: AnalysisFromAPI[];
+interface ReportsForComparisonResponse {
+    reports: ReportForComparison[];
+    tariff_type: string;
     total: number;
 }
 
@@ -89,16 +95,19 @@ export default function ComparePage() {
 
     const fetchAnalyses = async (): Promise<void> => {
         try {
-            const response = await api.get<AnalysesForComparisonResponse>("/analysis/for-comparison");
+            // Используем существующий эндпоинт reports/for-comparison
+            const response = await api.get<ReportsForComparisonResponse>("/reports/for-comparison");
             const data = response.data;
 
-            // Преобразуем данные в формат компонента
-            const formattedAnalyses: Analysis[] = data.analyses.map((analysis: AnalysisFromAPI) => ({
-                id: analysis.id,
-                created_at: analysis.created_at,
-                overall_score: analysis.overall_score,
-                photos: analysis.photos || []
-            }));
+            // Преобразуем reports в analyses формат
+            const formattedAnalyses: Analysis[] = data.reports
+                .filter((report: ReportForComparison) => report.overall_score !== null && report.analysis_id)
+                .map((report: ReportForComparison) => ({
+                    id: report.analysis_id!,  // используем analysis_id из отчета
+                    created_at: report.created_at,
+                    overall_score: report.overall_score,
+                    photos: report.photos || []
+                }));
 
             setAnalyses(formattedAnalyses);
         } catch (error) {
