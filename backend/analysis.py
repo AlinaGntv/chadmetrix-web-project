@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks, Form, Query
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks, Form, Query, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 import uuid
@@ -174,11 +174,13 @@ def get_analysis_history(
 
 @router.post("/compare/system")
 async def system_comparison(
-    analysis_ids: List[str],
+    request: dict = Body(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Системное сравнение метрик между анализами (простое сравнение)"""
+    
+    analysis_ids = request.get('analysis_ids', [])
     
     # Проверка тарифных ограничений
     tariff_type = current_user.tariff_type.lower()
@@ -189,6 +191,11 @@ async def system_comparison(
     if tariff_type == 'htn':
         # HTN: только 1 системное сравнение
         pass  # TODO: добавить счетчик сравнений
+    
+    if len(analysis_ids) < 2:
+        raise HTTPException(400, "Need at least 2 analysis_ids in the request")
+    
+    logger.info(f"[COMPARE] System comparison for user {current_user.id}, analysis_ids: {analysis_ids}")
     
     analyses = db.query(Analysis).filter(
         Analysis.id.in_(analysis_ids),
@@ -286,15 +293,22 @@ async def system_comparison(
         "reports_count": len(reports)
     }
 
-
 @router.post("/compare/llm")
 async def llm_comparison(
-    before_analysis_id: str,
-    after_analysis_id: str,
+    request: dict = Body(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """LLM сравнение двух фото (глубокий анализ изменений)"""
+    
+    before_analysis_id = request.get('before_analysis_id')
+    after_analysis_id = request.get('after_analysis_id')
+    
+    if not before_analysis_id or not after_analysis_id:
+        raise HTTPException(400, "before_analysis_id and after_analysis_id are required")
+    
+    logger.info(f"[COMPARE] LLM comparison for user {current_user.id}, before={before_analysis_id}, after={after_analysis_id}")
+    
     before_analysis = db.query(Analysis).filter(
         Analysis.id == before_analysis_id,
         Analysis.user_id == current_user.id
