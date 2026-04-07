@@ -95,7 +95,7 @@ export default function ComparePage() {
 
     const fetchAnalyses = async (): Promise<void> => {
         try {
-            const response = await api.get<ReportsForComparisonResponse>("/reports/for-comparison");
+            const response = await api.get("/analysis/for-comparison");
             const data = response.data;
 
             // Преобразуем данные в формат, который ожидает компонент (без any!)
