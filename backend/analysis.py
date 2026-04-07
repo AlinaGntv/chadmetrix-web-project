@@ -307,7 +307,51 @@ async def llm_comparison(
     if not before_analysis_id or not after_analysis_id:
         raise HTTPException(400, "before_analysis_id and after_analysis_id are required")
     
-    logger.info(f"[COMPARE] LLM comparison for user {current_user.id}, before={before_analysis_id}, after={after_analysis_id}")
+    # Проверка тарифных ограничений для LLM сравнения
+    tariff_type = current_user.tariff_type.lower()
+    
+    # Только CHAD тариф имеет доступ к LLM сравнению
+    if tariff_type != 'chad':
+        raise HTTPException(403, "LLM сравнение доступно только на тарифе CHAD")
+    
+    from datetime import datetime
+    
+    # Простой подход: используем month и year
+    now = datetime.utcnow()
+    current_month = now.month
+    current_year = now.year
+    
+    # Получаем сохраненные месяц и год последнего использования
+    last_used_month = getattr(current_user, 'llm_last_used_month', 0)
+    last_used_year = getattr(current_user, 'llm_last_used_year', 0)
+    
+    # Логируем текущее состояние
+    logger.info(f"[LLM CHECK] User {current_user.id}: "
+                f"used={current_user.llm_comparisons_used}, "
+                f"last_month={last_used_month}/{last_used_year}, "
+                f"current={current_month}/{current_year}")
+    
+    # Если новый месяц - сбрасываем счетчик
+    if last_used_year != current_year or last_used_month != current_month:
+        current_user.llm_comparisons_used = 0
+        current_user.llm_last_used_month = current_month
+        current_user.llm_last_used_year = current_year
+        db.commit()
+        logger.info(f"[LLM CHECK] Reset counter for user {current_user.id} (new month)")
+    
+    llm_comparisons_used = current_user.llm_comparisons_used or 0
+    llm_comparisons_limit = 1
+    
+    if llm_comparisons_used >= llm_comparisons_limit:
+        logger.warning(f"[LLM BLOCK] User {current_user.id} exceeded limit")
+        raise HTTPException(
+            403, 
+            f"Лимит LLM сравнений ({llm_comparisons_limit}) на месяц исчерпан. "
+            f"Следующее сравнение будет доступно в следующем месяце."
+        )
+    
+    logger.info(f"[COMPARE] LLM comparison for user {current_user.id}, "
+                f"before={before_analysis_id}, after={after_analysis_id}")
     
     before_analysis = db.query(Analysis).filter(
         Analysis.id == before_analysis_id,
@@ -339,14 +383,20 @@ async def llm_comparison(
         is_llm_comparison=True
     )
     
+    # Увеличиваем счетчик
+    current_user.llm_comparisons_used = 1
+    db.commit()
+    
+    logger.info(f"[COMPARE] LLM comparison completed for user {current_user.id}")
+    
     return {
         "before_analysis_id": before_analysis_id,
         "after_analysis_id": after_analysis_id,
         "before_date": before_analysis.created_at.isoformat(),
         "after_date": after_analysis.created_at.isoformat(),
-        "comparison": comparison_result.get("comparison", {})
+        "comparison": comparison_result.get("comparison", {}),
+        "llm_comparisons_remaining": 0
     }
-
 
 # =============================================================================
 # ДИНАМИЧЕСКИЕ РОУТЫ (с path parameters) - должны быть ПОСЛЕ статичных

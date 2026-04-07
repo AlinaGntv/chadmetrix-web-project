@@ -1,3 +1,5 @@
+from xmlrpc.client import DateTime
+
 from sqlalchemy import (
     Column, String, Numeric, Text, TIMESTAMP, ForeignKey, Boolean, Index, func, Integer
 )
@@ -169,6 +171,9 @@ class User(Base):
     tariff_expire = Column(TIMESTAMP(timezone=True), nullable=True)
     photo_uses_remaining = Column(Integer, nullable=False, default=0)
     bonus_uses_remaining = Column(Integer, nullable=False, default=0)
+    llm_comparisons_used = Column(Integer, default=0)
+    llm_last_used_month = Column(Integer, default=0)
+    llm_last_used_year = Column(Integer, default=0)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     is_deleted = Column(Boolean, default=False, nullable=False)
