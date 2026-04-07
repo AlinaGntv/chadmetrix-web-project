@@ -389,7 +389,6 @@ def get_analysis_status(
         "report_id": analysis.report_id
     }
 
-
 @router.get("/history")
 def get_analysis_history(
     db: Session = Depends(get_db),
@@ -410,7 +409,7 @@ def get_analysis_history(
             "id": analysis.id,
             "created_at": analysis.created_at.isoformat(),
             "has_report": analysis.report_id is not None,
-            "overall_score": report.overall_score if report else None,
+            "overall_score": float(report.overall_score) if report and report.overall_score else None,
             "photos": json.loads(analysis.photos) if analysis.photos else []
         })
     
