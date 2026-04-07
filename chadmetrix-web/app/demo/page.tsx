@@ -262,7 +262,8 @@ export default function DemoPage() {
                                 { text: "17 метрик", included: true },
                                 { text: "Роадмап 30 дней", included: true },
                                 { text: "2 фото (анфас + профиль)", included: true },
-                                { text: "1 сравнение/мес", included: true },
+                                { text: "Системное сравнение", included: true },
+                                { text: "AI-сравнение фото", included: false },
                                 { text: "Акцент на слабые зоны", included: false },
                             ]}
                             cta="Оформить"
@@ -275,7 +276,9 @@ export default function DemoPage() {
                                 { text: "17 метрик", included: true },
                                 { text: "Роадмап 30 дней", included: true },
                                 { text: "2 фото + анализ профиля", included: true },
-                                { text: "3 сравнения/мес", included: true },
+                                { text: "3 анализа в месяц", included: true },
+                                { text: "Системное сравнение", included: true },
+                                { text: "1 AI-сравнение фото/мес", included: true },
                                 { text: "Акцент на слабые зоны", included: true },
                             ]}
                             cta="Стать CHAD"
