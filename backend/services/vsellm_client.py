@@ -2,10 +2,7 @@ import os
 import json
 import logging
 import re
-import base64
-from typing import Dict, Any, Optional, Tuple, Union
-from io import BytesIO
-from PIL import Image
+from typing import Dict, Any, Optional
 import httpx
 
 # Импортируем настройки
@@ -21,101 +18,19 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-class ImageProcessor:
-    """Обработка изображений для Vision API - гарантированное качество"""
-    
-    @staticmethod
-    def prepare_base64(image_url_or_path: str, max_size: Tuple[int, int] = (2048, 2048), as_data_uri: bool = False) -> Union[str, bytes]:
-        """
-        Конвертирует изображение в base64 с контролем качества.
-        
-        Args:
-            image_url_or_path: URL изображения или локальный путь
-            max_size: Максимальный размер (ширина, высота) после ресайза
-            as_data_uri: Если True - возвращает data:image/jpeg;base64,{b64}
-                         Если False - возвращает только base64 строку
-            
-        Returns:
-            base64 строка (с или без префикса)
-        """
-        try:
-            # Загружаем изображение
-            if image_url_or_path.startswith(('http://', 'https://')):
-                import httpx
-                with httpx.Client(timeout=30.0) as client:
-                    response = client.get(image_url_or_path)
-                    response.raise_for_status()
-                    image_data = response.content
-                image = Image.open(BytesIO(image_data))
-            else:
-                # Локальный файл
-                image = Image.open(image_url_or_path)
-            
-            # Конвертируем в RGB (убираем альфа-канал)
-            if image.mode in ('RGBA', 'LA', 'P'):
-                rgb_image = Image.new('RGB', image.size, (255, 255, 255))
-                if image.mode == 'P':
-                    image = image.convert('RGBA')
-                rgb_image.paste(image, mask=image.split()[-1] if image.mode in ('RGBA', 'LA') else None)
-                image = rgb_image
-            elif image.mode != 'RGB':
-                image = image.convert('RGB')
-            
-            # Ресайз до 2048px по большей стороне (оптимально для GPT-Vision)
-            if max(image.size) > max(max_size):
-                ratio = max_size[0] / max(image.size)
-                new_size = (int(image.size[0] * ratio), int(image.size[1] * ratio))
-                image = image.resize(new_size, Image.Resampling.LANCZOS)
-                logger.info(f"[IMAGE] Resized from {image.size} to {new_size}")
-            
-            # Сохраняем в буфер с quality=95 (без optimize)
-            buffer = BytesIO()
-            image.save(buffer, format='JPEG', quality=95, optimize=False, progressive=False)
-            buffer.seek(0)
-            
-            # Кодируем в base64
-            b64_encoded = base64.b64encode(buffer.getvalue()).decode('utf-8')
-            size_kb = len(b64_encoded) * 3 / 4 / 1024
-            
-            logger.info(f"[IMAGE] Base64 prepared: {size_kb:.0f}KB, "
-                       f"dimensions: {image.size[0]}x{image.size[1]}")
-            
-            if as_data_uri:
-                return f"data:image/jpeg;base64,{b64_encoded}"
-            return b64_encoded
-            
-        except Exception as e:
-            logger.error(f"[IMAGE] Failed to prepare base64: {e}", exc_info=True)
-            raise ValueError(f"Failed to process image: {str(e)}")
-
-
 class VseLLMClient:
-    """Клиент для работы с VseLLM API с поддержкой base64 изображений"""
+    """Клиент для работы с VseLLM API с использованием внешних URL"""
     
     def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None, model: Optional[str] = None):
         self.api_key = api_key or settings.VSELM_API_KEY
         self.base_url = base_url or settings.VSELM_BASE_URL
         self.model = model or settings.VSELM_MODEL
         self.timeout = httpx.Timeout(300.0, connect=10.0)
-        self.image_processor = ImageProcessor()
         
         if not self.api_key:
             raise ValueError("VSELM_API_KEY is not set")
         
         logger.info(f"[VSELLM] Initialized: model={self.model}, base_url={self.base_url}")
-    
-    def _build_image_content(self, base64_image: str, detail: str = "high") -> Dict[str, Any]:
-        """
-        Строит контент изображения в формате, совместимом с VseLLM API.
-        Использует type="image_base64" как вы просили.
-        """
-        return {
-            "type": "image_base64",
-            "image_base64": {
-                "base64": base64_image,
-                "detail": detail
-            }
-        }
     
     async def analyze_face(
         self, 
@@ -125,31 +40,12 @@ class VseLLMClient:
         has_side_photo: bool = False,
         is_chad_tariff: bool = False
     ) -> Dict[str, Any]:
-        """Анализ лица с передачей изображений в base64 (формат image_base64)"""
+        """Анализ лица с передачей изображений по URL (без base64)"""
         
         logger.info(f"[ANALYZE] Starting analysis: side={has_side_photo}, chad={is_chad_tariff}")
-        
-        # Конвертируем изображения в base64 (без data URI префикса)
-        try:
-            import asyncio
-            loop = asyncio.get_event_loop()
-            
-            # Получаем чистый base64 (без префикса data:image)
-            front_base64 = await loop.run_in_executor(
-                None, lambda: self.image_processor.prepare_base64(photo_url, as_data_uri=False)
-            )
-            logger.info(f"[ANALYZE] Front image converted to base64 (length: {len(front_base64)})")
-            
-            side_base64 = None
-            if side_url and has_side_photo:
-                side_base64 = await loop.run_in_executor(
-                    None, lambda: self.image_processor.prepare_base64(side_url, as_data_uri=False)
-                )
-                logger.info(f"[ANALYZE] Side image converted to base64 (length: {len(side_base64)})")
-                
-        except Exception as e:
-            logger.error(f"[ANALYZE] Failed to prepare images: {e}", exc_info=True)
-            raise Exception(f"Image processing failed: {str(e)}")
+        logger.info(f"[ANALYZE] Front URL: {photo_url}")
+        if side_url:
+            logger.info(f"[ANALYZE] Side URL: {side_url}")
         
         # Базовый контекст (ОРИГИНАЛЬНЫЙ - не меняем!)
         context_prompt = """# КОНТЕКСТ
@@ -297,16 +193,28 @@ Chad:
 
         full_prompt = context_prompt + json_instruction
 
-        # Формируем запрос с image_base64 (новый формат)
+        # Формируем запрос с URL изображений (НЕ base64!)
         content = [{"type": "text", "text": full_prompt}]
         
-        # Добавляем фото анфас в формате image_base64
-        content.append(self._build_image_content(front_base64, "high"))
+        # Добавляем фото анфас по URL
+        content.append({
+            "type": "image_url",
+            "image_url": {
+                "url": photo_url,
+                "detail": "high"
+            }
+        })
         
         # Добавляем фото профиля если есть
-        if side_base64 and has_side_photo:
-            content.append(self._build_image_content(side_base64, "high"))
-            logger.info(f"[VSELLM] Added side photo (image_base64)")
+        if side_url and has_side_photo:
+            content.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": side_url,
+                    "detail": "high"
+                }
+            })
+            logger.info(f"[VSELLM] Added side photo URL")
         
         payload = {
             "model": self.model,
@@ -316,9 +224,8 @@ Chad:
         }
         
         # Логируем размер payload для отладки
-        payload_size = len(json.dumps(payload))
         logger.info(f"[VSELLM] Sending request: model={self.model}, "
-                   f"images={len(content)-1}, payload_size={payload_size//1024}KB, "
+                   f"images={len(content)-1}, "
                    f"max_tokens={payload['max_tokens']}")
         
         headers = {
@@ -484,25 +391,9 @@ Chad:
         return result
 
     async def analyze_comparison(self, before_url: str, after_url: str, is_llm_comparison: bool = False) -> Dict[str, Any]:
-        """Сравнение двух фото с использованием image_base64"""
+        """Сравнение двух фото по URL"""
         
-        logger.info(f"[COMPARE] Starting comparison with image_base64")
-        
-        # Конвертируем оба изображения в base64
-        import asyncio
-        loop = asyncio.get_event_loop()
-        
-        try:
-            before_base64 = await loop.run_in_executor(
-                None, lambda: self.image_processor.prepare_base64(before_url, as_data_uri=False)
-            )
-            after_base64 = await loop.run_in_executor(
-                None, lambda: self.image_processor.prepare_base64(after_url, as_data_uri=False)
-            )
-            logger.info(f"[COMPARE] Both images converted to base64")
-        except Exception as e:
-            logger.error(f"[COMPARE] Failed to prepare images: {e}")
-            raise Exception(f"Image processing failed: {str(e)}")
+        logger.info(f"[COMPARE] Starting comparison with URLs")
         
         prompt = """Сравни два фото одного симуляционного персонажа (до и после).
 Оцени изменения по шкале от -10 до +10 для каждой метрики.
@@ -512,8 +403,14 @@ Chad:
 
         content = [
             {"type": "text", "text": prompt},
-            self._build_image_content(before_base64, "high"),
-            self._build_image_content(after_base64, "high")
+            {
+                "type": "image_url",
+                "image_url": {"url": before_url, "detail": "high"}
+            },
+            {
+                "type": "image_url",
+                "image_url": {"url": after_url, "detail": "high"}
+            }
         ]
         
         payload = {
