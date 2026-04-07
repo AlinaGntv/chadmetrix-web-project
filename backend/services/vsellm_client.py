@@ -15,7 +15,7 @@ except ImportError:
     class FallbackSettings:
         VSELM_API_KEY = os.getenv("VSELM_API_KEY")
         VSELM_BASE_URL = os.getenv("VSELM_BASE_URL", "https://api.vsellm.ru/v1")
-        VSELM_MODEL = os.getenv("VSELM_MODEL", "openai/gpt-4.1")
+        VSELM_MODEL = os.getenv("VSELM_MODEL", "openai/gpt-5.2")
     settings = FallbackSettings()
 
 logger = logging.getLogger(__name__)
