@@ -5,7 +5,7 @@ from typing import List
 import json
 
 from database import get_db
-from models.models import Report, User, Analysis  # Добавлен Analysis
+from models.models import Report, User, Analysis
 from auth import get_current_user
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
@@ -35,6 +35,60 @@ def get_reports(
     ]
 
 
+# === ВАЖНО: /for-comparison ДОЛЖЕН БЫТЬ ДО /{report_id} ===
+@router.get("/for-comparison")
+def get_reports_for_comparison(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Получить отчеты для сравнения (с фото и метриками)"""
+    
+    reports = db.query(Report).filter(
+        Report.user_id == current_user.id,
+        Report.is_deleted == False
+    ).order_by(Report.created_at.desc()).all()
+    
+    result = []
+    for report in reports:
+        analysis = db.query(Analysis).filter(
+            Analysis.report_id == report.id,
+            Analysis.user_id == current_user.id
+        ).first()
+        
+        photos = []
+        if analysis and analysis.photos:
+            try:
+                photos = json.loads(analysis.photos)
+            except:
+                photos = []
+        
+        meta = {}
+        if report.meta:
+            try:
+                meta = json.loads(report.meta)
+            except:
+                pass
+        
+        result.append({
+            "id": report.id,
+            "analysis_id": analysis.id if analysis else None,
+            "tariff": report.tariff,
+            "overall_score": float(report.overall_score) if report.overall_score else None,
+            "potential_score": float(report.potential_score) if report.potential_score else None,
+            "category": meta.get('category'),
+            "photos": photos,
+            "created_at": report.created_at.isoformat() if report.created_at else None,
+            "metrics": json.loads(report.metrics_data) if report.metrics_data else None
+        })
+    
+    return {
+        "reports": result,
+        "tariff_type": current_user.tariff_type,
+        "total": len(result)
+    }
+
+
+# === /{report_id} ПОСЛЕ всех статичных роутов ===
 @router.get("/{report_id}")
 def get_report(
     report_id: str,
@@ -51,7 +105,6 @@ def get_report(
     if not report:
         raise HTTPException(404, "Report not found")
     
-    # Находим связанный анализ для получения фото
     analysis = db.query(Analysis).filter(
         Analysis.report_id == report_id,
         Analysis.user_id == current_user.id
@@ -85,58 +138,4 @@ def get_report(
             "summary": json.loads(report.meta).get('summary') if report.meta else None,
             "improvement_plan": report.improvement_plan,
         }
-    }
-
-@router.get("/for-comparison")
-def get_reports_for_comparison(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Получить отчеты для сравнения (с фото и метриками)"""
-    
-    # Получаем все отчеты пользователя
-    reports = db.query(Report).filter(
-        Report.user_id == current_user.id,
-        Report.is_deleted == False
-    ).order_by(Report.created_at.desc()).all()
-    
-    result = []
-    for report in reports:
-        # Находим связанный анализ для получения фото
-        analysis = db.query(Analysis).filter(
-            Analysis.report_id == report.id,
-            Analysis.user_id == current_user.id
-        ).first()
-        
-        photos = []
-        if analysis and analysis.photos:
-            try:
-                photos = json.loads(analysis.photos)
-            except:
-                photos = []
-        
-        # Получаем метаданные
-        meta = {}
-        if report.meta:
-            try:
-                meta = json.loads(report.meta)
-            except:
-                pass
-        
-        result.append({
-            "id": report.id,
-            "analysis_id": analysis.id if analysis else None,
-            "tariff": report.tariff,
-            "overall_score": float(report.overall_score) if report.overall_score else None,
-            "potential_score": float(report.potential_score) if report.potential_score else None,
-            "category": meta.get('category'),
-            "photos": photos,
-            "created_at": report.created_at.isoformat() if report.created_at else None,
-            "metrics": json.loads(report.metrics_data) if report.metrics_data else None
-        })
-    
-    return {
-        "reports": result,
-        "tariff_type": current_user.tariff_type,
-        "total": len(result)
     }

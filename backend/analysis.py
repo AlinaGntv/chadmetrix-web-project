@@ -104,6 +104,240 @@ def save_file(file: UploadFile) -> tuple[str, str]:
     return local_path, public_url
 
 
+# =============================================================================
+# СТАТИЧНЫЕ РОУТЫ (без path parameters) - должны быть ПЕРВЫМИ
+# =============================================================================
+
+@router.get("/for-comparison")
+def get_analyses_for_comparison(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Получить анализы для страницы сравнения (только завершенные с overall_score)"""
+    analyses = db.query(Analysis).filter(
+        Analysis.user_id == current_user.id,
+        Analysis.is_deleted == False,
+        Analysis.report_id.isnot(None)  # Только с отчетом
+    ).order_by(desc(Analysis.created_at)).all()
+    
+    result = []
+    for analysis in analyses:
+        report = db.query(Report).filter(Report.id == analysis.report_id).first()
+        # Пропускаем если нет отчета или overall_score
+        if not report or report.overall_score is None:
+            continue
+            
+        photos = json.loads(analysis.photos) if analysis.photos else []
+        
+        result.append({
+            "id": analysis.id,
+            "created_at": analysis.created_at.isoformat(),
+            "overall_score": float(report.overall_score),
+            "photos": photos
+        })
+    
+    return {
+        "analyses": result,
+        "total": len(result)
+    }
+
+
+@router.get("/history")
+def get_analysis_history(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0)
+):
+    """Получить историю анализов пользователя для сравнений"""
+    analyses = db.query(Analysis).filter(
+        Analysis.user_id == current_user.id,
+        Analysis.is_deleted == False
+    ).order_by(desc(Analysis.created_at)).offset(offset).limit(limit).all()
+    
+    result = []
+    for analysis in analyses:
+        report = db.query(Report).filter(Report.id == analysis.report_id).first()
+        result.append({
+            "id": analysis.id,
+            "created_at": analysis.created_at.isoformat(),
+            "has_report": analysis.report_id is not None,
+            "overall_score": float(report.overall_score) if report and report.overall_score else None,
+            "photos": json.loads(analysis.photos) if analysis.photos else []
+        })
+    
+    return {
+        "analyses": result,
+        "total": len(result)
+    }
+
+
+@router.post("/compare/system")
+async def system_comparison(
+    analysis_ids: List[str],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Системное сравнение метрик между анализами (простое сравнение)"""
+    
+    # Проверка тарифных ограничений
+    tariff_type = current_user.tariff_type.lower()
+    
+    if tariff_type == 'basic' or tariff_type == 'разовый':
+        raise HTTPException(403, "Системное сравнение доступно только на тарифах HTN и CHAD")
+    
+    if tariff_type == 'htn':
+        # HTN: только 1 системное сравнение
+        pass  # TODO: добавить счетчик сравнений
+    
+    analyses = db.query(Analysis).filter(
+        Analysis.id.in_(analysis_ids),
+        Analysis.user_id == current_user.id
+    ).all()
+    
+    if len(analyses) < 2:
+        raise HTTPException(400, "Need at least 2 analyses for comparison")
+    
+    reports = []
+    for analysis in analyses:
+        report = db.query(Report).filter(Report.id == analysis.report_id).first()
+        if report and report.metrics_data:
+            # Получаем метаданные
+            meta = {}
+            if report.meta:
+                try:
+                    meta = json.loads(report.meta)
+                except:
+                    pass
+            
+            reports.append({
+                "id": analysis.id,
+                "report_id": report.id,
+                "date": analysis.created_at.isoformat(),
+                "metrics": json.loads(report.metrics_data),
+                "overall_score": report.overall_score,
+                "potential_score": report.potential_score,
+                "category": meta.get('category')
+            })
+    
+    if len(reports) < 2:
+        raise HTTPException(400, "Not enough completed reports for comparison")
+    
+    # Сортируем по дате
+    reports.sort(key=lambda x: x['date'])
+    
+    # Сравниваем первый и последний
+    first = reports[0]
+    last = reports[-1]
+    
+    # Сравниваем метрики
+    metrics_progress = {}
+    first_metrics = first.get("metrics", {})
+    last_metrics = last.get("metrics", {})
+    
+    for metric_name in first_metrics:
+        first_value = first_metrics.get(metric_name, {}).get("value", 0) if isinstance(first_metrics.get(metric_name), dict) else first_metrics.get(metric_name, 0)
+        last_value = last_metrics.get(metric_name, {}).get("value", 0) if isinstance(last_metrics.get(metric_name), dict) else last_metrics.get(metric_name, 0)
+        
+        # Приводим к float
+        try:
+            first_val = float(first_value) if first_value else 0
+            last_val = float(last_value) if last_value else 0
+        except:
+            first_val = 0
+            last_val = 0
+        
+        metrics_progress[metric_name] = {
+            "first": first_val,
+            "last": last_val,
+            "change": round(last_val - first_val, 1),
+            "trend": "up" if last_val > first_val else "down" if last_val < first_val else "stable"
+        }
+    
+    # Общая динамика
+    overall_change = 0
+    if first.get("overall_score") and last.get("overall_score"):
+        try:
+            overall_change = round(float(last["overall_score"]) - float(first["overall_score"]), 1)
+        except:
+            overall_change = 0
+    
+    return {
+        "comparison_type": "system",
+        "first_report": {
+            "id": first["id"],
+            "report_id": first["report_id"],
+            "date": first["date"],
+            "overall_score": first["overall_score"],
+            "potential_score": first["potential_score"],
+            "category": first.get("category")
+        },
+        "last_report": {
+            "id": last["id"],
+            "report_id": last["report_id"],
+            "date": last["date"],
+            "overall_score": last["overall_score"],
+            "potential_score": last["potential_score"],
+            "category": last.get("category")
+        },
+        "metrics_progress": metrics_progress,
+        "overall_change": overall_change,
+        "trend": "up" if overall_change > 0 else "down" if overall_change < 0 else "stable",
+        "reports_count": len(reports)
+    }
+
+
+@router.post("/compare/llm")
+async def llm_comparison(
+    before_analysis_id: str,
+    after_analysis_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """LLM сравнение двух фото (глубокий анализ изменений)"""
+    before_analysis = db.query(Analysis).filter(
+        Analysis.id == before_analysis_id,
+        Analysis.user_id == current_user.id
+    ).first()
+    
+    after_analysis = db.query(Analysis).filter(
+        Analysis.id == after_analysis_id,
+        Analysis.user_id == current_user.id
+    ).first()
+    
+    if not before_analysis or not after_analysis:
+        raise HTTPException(404, "Analysis not found")
+    
+    # Получаем фото
+    before_photos = json.loads(before_analysis.photos) if before_analysis.photos else []
+    after_photos = json.loads(after_analysis.photos) if after_analysis.photos else []
+    
+    if not before_photos or not after_photos:
+        raise HTTPException(400, "Photos not found for comparison")
+    
+    # Используем первое фото (анфас) для сравнения
+    before_url = before_photos[0]
+    after_url = after_photos[0]
+    
+    comparison_result = await vsellm_client.analyze_comparison(
+        before_url, 
+        after_url, 
+        is_llm_comparison=True
+    )
+    
+    return {
+        "before_analysis_id": before_analysis_id,
+        "after_analysis_id": after_analysis_id,
+        "before_date": before_analysis.created_at.isoformat(),
+        "after_date": after_analysis.created_at.isoformat(),
+        "comparison": comparison_result.get("comparison", {})
+    }
+
+
+# =============================================================================
+# ДИНАМИЧЕСКИЕ РОУТЫ (с path parameters) - должны быть ПОСЛЕ статичных
+# =============================================================================
+
 @router.post("")
 async def create_analysis(
     background_tasks: BackgroundTasks,
@@ -314,6 +548,8 @@ async def _process_analysis(analysis_id: str, front_url: str, side_url: str | No
         raise
 
 
+# ВАЖНО: Этот роут должен быть ПОСЛЕ всех статичных (/for-comparison, /history, /compare/*)
+# но ПЕРЕД /{analysis_id}/status из-за порядка matching
 @router.get("/{analysis_id}")
 def get_analysis(
     analysis_id: str,
@@ -365,6 +601,7 @@ def get_analysis(
     }
 
 
+# Этот роут ПОСЛЕ /{analysis_id} потому что путь длиннее
 @router.get("/{analysis_id}/status")
 def get_analysis_status(
     analysis_id: str,
@@ -387,228 +624,4 @@ def get_analysis_status(
         "status": "completed" if has_report else "processing",
         "has_report": has_report,
         "report_id": analysis.report_id
-    }
-
-@router.get("/history")
-def get_analysis_history(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    limit: int = Query(50, ge=1, le=100),
-    offset: int = Query(0, ge=0)
-):
-    """Получить историю анализов пользователя для сравнений"""
-    analyses = db.query(Analysis).filter(
-        Analysis.user_id == current_user.id,
-        Analysis.is_deleted == False
-    ).order_by(desc(Analysis.created_at)).offset(offset).limit(limit).all()
-    
-    result = []
-    for analysis in analyses:
-        report = db.query(Report).filter(Report.id == analysis.report_id).first()
-        result.append({
-            "id": analysis.id,
-            "created_at": analysis.created_at.isoformat(),
-            "has_report": analysis.report_id is not None,
-            "overall_score": float(report.overall_score) if report and report.overall_score else None,
-            "photos": json.loads(analysis.photos) if analysis.photos else []
-        })
-    
-    return {
-        "analyses": result,
-        "total": len(result)
-    }
-
-@router.post("/compare/system")
-async def system_comparison(
-    analysis_ids: List[str],
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Системное сравнение метрик между анализами (простое сравнение)"""
-    
-    # Проверка тарифных ограничений
-    tariff_type = current_user.tariff_type.lower()
-    
-    if tariff_type == 'basic' or tariff_type == 'разовый':
-        raise HTTPException(403, "Системное сравнение доступно только на тарифах HTN и CHAD")
-    
-    if tariff_type == 'htn':
-        # HTN: только 1 системное сравнение
-        # Проверяем, сколько сравнений уже сделал пользователь
-        # (можно хранить в отдельной таблице, пока сделаем простое ограничение)
-        pass  # TODO: добавить счетчик сравнений
-    
-    analyses = db.query(Analysis).filter(
-        Analysis.id.in_(analysis_ids),
-        Analysis.user_id == current_user.id
-    ).all()
-    
-    if len(analyses) < 2:
-        raise HTTPException(400, "Need at least 2 analyses for comparison")
-    
-    reports = []
-    for analysis in analyses:
-        report = db.query(Report).filter(Report.id == analysis.report_id).first()
-        if report and report.metrics_data:
-            # Получаем метаданные
-            meta = {}
-            if report.meta:
-                try:
-                    meta = json.loads(report.meta)
-                except:
-                    pass
-            
-            reports.append({
-                "id": analysis.id,
-                "report_id": report.id,
-                "date": analysis.created_at.isoformat(),
-                "metrics": json.loads(report.metrics_data),
-                "overall_score": report.overall_score,
-                "potential_score": report.potential_score,
-                "category": meta.get('category')
-            })
-    
-    if len(reports) < 2:
-        raise HTTPException(400, "Not enough completed reports for comparison")
-    
-    # Сортируем по дате
-    reports.sort(key=lambda x: x['date'])
-    
-    # Сравниваем первый и последний
-    first = reports[0]
-    last = reports[-1]
-    
-    # Сравниваем метрики
-    metrics_progress = {}
-    first_metrics = first.get("metrics", {})
-    last_metrics = last.get("metrics", {})
-    
-    for metric_name in first_metrics:
-        first_value = first_metrics.get(metric_name, {}).get("value", 0) if isinstance(first_metrics.get(metric_name), dict) else first_metrics.get(metric_name, 0)
-        last_value = last_metrics.get(metric_name, {}).get("value", 0) if isinstance(last_metrics.get(metric_name), dict) else last_metrics.get(metric_name, 0)
-        
-        # Приводим к float
-        try:
-            first_val = float(first_value) if first_value else 0
-            last_val = float(last_value) if last_value else 0
-        except:
-            first_val = 0
-            last_val = 0
-        
-        metrics_progress[metric_name] = {
-            "first": first_val,
-            "last": last_val,
-            "change": round(last_val - first_val, 1),
-            "trend": "up" if last_val > first_val else "down" if last_val < first_val else "stable"
-        }
-    
-    # Общая динамика
-    overall_change = 0
-    if first.get("overall_score") and last.get("overall_score"):
-        try:
-            overall_change = round(float(last["overall_score"]) - float(first["overall_score"]), 1)
-        except:
-            overall_change = 0
-    
-    return {
-        "comparison_type": "system",
-        "first_report": {
-            "id": first["id"],
-            "report_id": first["report_id"],
-            "date": first["date"],
-            "overall_score": first["overall_score"],
-            "potential_score": first["potential_score"],
-            "category": first.get("category")
-        },
-        "last_report": {
-            "id": last["id"],
-            "report_id": last["report_id"],
-            "date": last["date"],
-            "overall_score": last["overall_score"],
-            "potential_score": last["potential_score"],
-            "category": last.get("category")
-        },
-        "metrics_progress": metrics_progress,
-        "overall_change": overall_change,
-        "trend": "up" if overall_change > 0 else "down" if overall_change < 0 else "stable",
-        "reports_count": len(reports)
-    }
-
-@router.post("/compare/llm")
-async def llm_comparison(
-    before_analysis_id: str,
-    after_analysis_id: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """LLM сравнение двух фото (глубокий анализ изменений)"""
-    before_analysis = db.query(Analysis).filter(
-        Analysis.id == before_analysis_id,
-        Analysis.user_id == current_user.id
-    ).first()
-    
-    after_analysis = db.query(Analysis).filter(
-        Analysis.id == after_analysis_id,
-        Analysis.user_id == current_user.id
-    ).first()
-    
-    if not before_analysis or not after_analysis:
-        raise HTTPException(404, "Analysis not found")
-    
-    # Получаем фото
-    before_photos = json.loads(before_analysis.photos) if before_analysis.photos else []
-    after_photos = json.loads(after_analysis.photos) if after_analysis.photos else []
-    
-    if not before_photos or not after_photos:
-        raise HTTPException(400, "Photos not found for comparison")
-    
-    # Используем первое фото (анфас) для сравнения
-    before_url = before_photos[0]
-    after_url = after_photos[0]
-    
-    comparison_result = await vsellm_client.analyze_comparison(
-        before_url, 
-        after_url, 
-        is_llm_comparison=True
-    )
-    
-    return {
-        "before_analysis_id": before_analysis_id,
-        "after_analysis_id": after_analysis_id,
-        "before_date": before_analysis.created_at.isoformat(),
-        "after_date": after_analysis.created_at.isoformat(),
-        "comparison": comparison_result.get("comparison", {})
-    }
-
-@router.get("/for-comparison")
-def get_analyses_for_comparison(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Получить анализы для страницы сравнения (только завершенные с overall_score)"""
-    analyses = db.query(Analysis).filter(
-        Analysis.user_id == current_user.id,
-        Analysis.is_deleted == False,
-        Analysis.report_id.isnot(None)  # Только с отчетом
-    ).order_by(desc(Analysis.created_at)).all()
-    
-    result = []
-    for analysis in analyses:
-        report = db.query(Report).filter(Report.id == analysis.report_id).first()
-        # Пропускаем если нет отчета или overall_score
-        if not report or report.overall_score is None:
-            continue
-            
-        photos = json.loads(analysis.photos) if analysis.photos else []
-        
-        result.append({
-            "id": analysis.id,
-            "created_at": analysis.created_at.isoformat(),
-            "overall_score": float(report.overall_score),
-            "photos": photos
-        })
-    
-    return {
-        "analyses": result,
-        "total": len(result)
     }
