@@ -173,6 +173,7 @@ Chad:
                 llm_response = result["choices"][0]["message"]["content"]
                 
                 logger.info(f"[VSELLM] Received response: {len(llm_response)} chars")
+                logger.info(f"[VSELLM] FULL RESPONSE:\n{llm_response}")
                 
                 # Проверяем наличие маски
                 if "квадрат" in llm_response.lower() or "размыт" in llm_response.lower() or "маск" in llm_response.lower():
