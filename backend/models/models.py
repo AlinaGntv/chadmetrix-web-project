@@ -114,8 +114,8 @@ class Review(Base):
     admin_replied_at = Column(TIMESTAMP(timezone=True), nullable=True)
     admin_replied_by = Column(String, ForeignKey('users.id'), nullable=True)
     
-    # relationships
-    user = relationship("User", foreign_keys=[user_id])
+    # relationships - ВАЖНО: указываем foreign_keys явно!
+    user = relationship("User", foreign_keys=[user_id], back_populates="reviews")
     admin = relationship("User", foreign_keys=[admin_replied_by])
 
 class Promocode(Base):
@@ -196,7 +196,7 @@ class User(Base):
     reports = relationship("Report", back_populates="user", cascade="all, delete-orphan")
     analyses = relationship("Analysis", back_populates="user", cascade="all, delete-orphan")
     metrics = relationship("Metric", back_populates="user", cascade="all, delete-orphan")
-    reviews = relationship("Review", back_populates="user", cascade="all, delete-orphan")
+    reviews = relationship("Review", foreign_keys="Review.user_id", back_populates="user", cascade="all, delete-orphan")
 
     # Для автоплатежей
     payment_method_id = Column(String, nullable=True)  # ID сохраненной карты в ЮKassa
