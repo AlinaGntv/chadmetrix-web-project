@@ -6,6 +6,7 @@ import { Star, MessageCircle, User as UserIcon, Trash2, Loader2, ChevronDown, Ch
 import Image from "next/image";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { AdminReply } from "./AdminReply";
 
 interface Review {
     id: string;
@@ -15,6 +16,12 @@ interface Review {
     rating: number;
     comment?: string;
     created_at: string;
+    admin_reply?: string | null;
+    admin_reply_at?: string | null;
+    admin_replied_by?: {
+        name: string;
+        avatar?: string;
+    } | null;
 }
 
 interface ReviewStats {
@@ -119,7 +126,7 @@ export function ReviewsSection() {
     const [stats, setStats] = useState<ReviewStats | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    // Проверка на админа - ЗАМЕНИТЕ НА СВОИ EMAIL
+    // Проверка на админа
     const isAdmin = user?.email === "gntv.surname@gmail.com";
 
     const fetchReviews = async () => {
@@ -147,6 +154,11 @@ export function ReviewsSection() {
         fetchStats();
     };
 
+    const handleDataRefresh = () => {
+        fetchReviews();
+        fetchStats();
+    };
+
     useEffect(() => {
         fetchReviews();
         fetchStats();
@@ -158,6 +170,16 @@ export function ReviewsSection() {
             year: 'numeric',
             month: 'long',
             day: 'numeric'
+        });
+    };
+
+    const formatReplyDate = (dateString: string) => {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('ru-RU', {
+            day: 'numeric',
+            month: 'long',
+            hour: '2-digit',
+            minute: '2-digit'
         });
     };
 
@@ -254,6 +276,34 @@ export function ReviewsSection() {
                         {/* Comment with expand/collapse */}
                         {review.comment && (
                             <ExpandableComment comment={review.comment} />
+                        )}
+
+                        {/* Admin reply section - только для админа (управление) */}
+                        {isAdmin && review.comment && (
+                            <AdminReply
+                                reviewId={review.id}
+                                existingReply={review.admin_reply}
+                                existingReplyAt={review.admin_reply_at}
+                                onReplyAdded={handleDataRefresh}
+                                onReplyDeleted={handleDataRefresh}
+                                onReplyEdited={handleDataRefresh}
+                            />
+                        )}
+
+                        {/* Show reply to regular users (non-admin) */}
+                        {!isAdmin && review.admin_reply && (
+                            <div className="mt-3 pl-3 border-l-2 border-blue-500/30">
+                                <div className="flex items-center gap-2 text-xs text-blue-400 mb-1">
+                                    <MessageCircle className="w-3 h-3" />
+                                    <span>Ответ администратора</span>
+                                    {review.admin_reply_at && (
+                                        <span className="text-gray-500 text-xs">
+                                            • {formatReplyDate(review.admin_reply_at)}
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-gray-300 text-sm leading-relaxed">{review.admin_reply}</p>
+                            </div>
                         )}
                     </div>
                 ))}

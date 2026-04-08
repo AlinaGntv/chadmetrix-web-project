@@ -5,7 +5,7 @@ from sqlalchemy import desc
 from database import get_db
 from models.models import User, Review, Promocode, PromocodeUsage, Payment
 from auth import get_current_user
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime, timedelta
 import uuid
@@ -127,7 +127,7 @@ async def create_review(
 
 @router.get("/list")
 async def get_reviews(
-    limit: int = Query(10, ge=1, le=50),
+    limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db)
 ):
@@ -137,10 +137,20 @@ async def get_reviews(
         Review.is_deleted == False
     ).order_by(desc(Review.created_at)).offset(offset).limit(limit).all()
     
-    # Добавляем информацию о пользователе
     result = []
     for review in reviews:
         user = db.query(User).filter(User.id == review.user_id).first()
+        
+        # Получаем информацию об админе, который ответил
+        admin_info = None
+        if review.admin_replied_by:
+            admin = db.query(User).filter(User.id == review.admin_replied_by).first()
+            if admin:
+                admin_info = {
+                    "name": admin.full_name or admin.email,
+                    "avatar": admin.avatar_url
+                }
+        
         result.append({
             "id": review.id,
             "user_id": review.user_id,
@@ -148,7 +158,10 @@ async def get_reviews(
             "user_avatar": user.avatar_url if user else None,
             "rating": review.rating,
             "comment": review.comment,
-            "created_at": review.created_at
+            "created_at": review.created_at,
+            "admin_reply": review.admin_reply,
+            "admin_reply_at": review.admin_reply_at,
+            "admin_replied_by": admin_info
         })
     
     return result
@@ -302,3 +315,115 @@ async def delete_review(
     logger.info(f"Review {review_id} deleted by admin {current_user.email}")
     
     return {"message": "Отзыв удалён"}
+
+# =============================================================================
+# АДМИН ЭНДПОИНТЫ ДЛЯ ОТВЕТОВ НА ОТЗЫВЫ
+# =============================================================================
+
+class AdminReplyRequest(BaseModel):
+    reply: str
+
+@router.post("/{review_id}/reply")
+async def add_admin_reply(
+    review_id: str,
+    reply_data: AdminReplyRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Добавить ответ на отзыв (только для админов)"""
+    
+    # Проверка админа
+    ADMIN_EMAILS = ["gntv.surname@gmail.com"]
+    if current_user.email not in ADMIN_EMAILS:
+        raise HTTPException(403, "Только администраторы могут отвечать на отзывы")
+    
+    # Находим отзыв
+    review = db.query(Review).filter(
+        Review.id == review_id,
+        Review.is_deleted == False
+    ).first()
+    
+    if not review:
+        raise HTTPException(404, "Отзыв не найден")
+    
+    # Добавляем ответ
+    review.admin_reply = reply_data.reply.strip()
+    review.admin_reply_at = datetime.utcnow()
+    review.admin_replied_by = current_user.id
+    
+    db.commit()
+    
+    logger.info(f"Admin {current_user.email} replied to review {review_id}")
+    
+    return {
+        "message": "Ответ добавлен",
+        "reply": review.admin_reply,
+        "replied_at": review.admin_reply_at
+    }
+
+
+@router.delete("/{review_id}/reply")
+async def delete_admin_reply(
+    review_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Удалить ответ на отзыв (только для админов)"""
+    
+    ADMIN_EMAILS = ["gntv.surname@gmail.com"]
+    if current_user.email not in ADMIN_EMAILS:
+        raise HTTPException(403, "Только администраторы могут удалять ответы")
+    
+    review = db.query(Review).filter(
+        Review.id == review_id,
+        Review.is_deleted == False
+    ).first()
+    
+    if not review:
+        raise HTTPException(404, "Отзыв не найден")
+    
+    review.admin_reply = None
+    review.admin_reply_at = None
+    review.admin_replied_by = None
+    
+    db.commit()
+    
+    logger.info(f"Admin {current_user.email} deleted reply from review {review_id}")
+    
+    return {"message": "Ответ удалён"}
+
+
+@router.put("/{review_id}/reply")
+async def edit_admin_reply(
+    review_id: str,
+    reply_data: AdminReplyRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Редактировать ответ на отзыв (только для админов)"""
+    
+    ADMIN_EMAILS = ["gntv.surname@gmail.com"]
+    if current_user.email not in ADMIN_EMAILS:
+        raise HTTPException(403, "Только администраторы могут редактировать ответы")
+    
+    review = db.query(Review).filter(
+        Review.id == review_id,
+        Review.is_deleted == False
+    ).first()
+    
+    if not review:
+        raise HTTPException(404, "Отзыв не найден")
+    
+    if not review.admin_reply:
+        raise HTTPException(400, "Ответ ещё не добавлен")
+    
+    review.admin_reply = reply_data.reply.strip()
+    review.admin_reply_at = datetime.utcnow()  # Обновляем дату
+    
+    db.commit()
+    
+    return {
+        "message": "Ответ обновлён",
+        "reply": review.admin_reply,
+        "replied_at": review.admin_reply_at
+    }
