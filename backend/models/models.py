@@ -203,12 +203,13 @@ class User(Base):
     auto_payment_enabled = Column(Boolean, default=False, nullable=False)
 
 # Обратные связи
+# Обратные связи (только те, которые не определены в классах)
 Photo.user = relationship("User", back_populates="photos")
 Metric.user = relationship("User", back_populates="metrics")
 Report.user = relationship("User", back_populates="reports")
 Referral.referrer = relationship("User", foreign_keys=[Referral.referrer_id], backref="referrals_made")
 Referral.invited_user = relationship("User", foreign_keys=[Referral.invited_user_id], backref="referred_by")
-Review.user = relationship("User", back_populates="reviews")
+# Review.user уже определён в классе Review, НЕ ДУБЛИРУЕМ!
 PromocodeUsage.user = relationship("User")
 PromocodeUsage.payment = relationship("Payment")
 Analysis.user = relationship("User", back_populates="analyses")
