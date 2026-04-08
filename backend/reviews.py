@@ -160,7 +160,7 @@ async def get_reviews(
             "comment": review.comment,
             "created_at": review.created_at,
             "admin_reply": review.admin_reply,
-            "admin_reply_at": review.admin_reply_at,
+            "admin_reply_at": review.admin_replied_at,  # Исправлено!
             "admin_replied_by": admin_info
         })
     
@@ -332,12 +332,10 @@ async def add_admin_reply(
 ):
     """Добавить ответ на отзыв (только для админов)"""
     
-    # Проверка админа
     ADMIN_EMAILS = ["gntv.surname@gmail.com"]
     if current_user.email not in ADMIN_EMAILS:
         raise HTTPException(403, "Только администраторы могут отвечать на отзывы")
     
-    # Находим отзыв
     review = db.query(Review).filter(
         Review.id == review_id,
         Review.is_deleted == False
@@ -348,7 +346,7 @@ async def add_admin_reply(
     
     # Добавляем ответ
     review.admin_reply = reply_data.reply.strip()
-    review.admin_reply_at = datetime.utcnow()
+    review.admin_replied_at = datetime.utcnow()  # Исправлено!
     review.admin_replied_by = current_user.id
     
     db.commit()
@@ -358,7 +356,7 @@ async def add_admin_reply(
     return {
         "message": "Ответ добавлен",
         "reply": review.admin_reply,
-        "replied_at": review.admin_reply_at
+        "replied_at": review.admin_replied_at  # Исправлено!
     }
 
 
@@ -383,7 +381,7 @@ async def delete_admin_reply(
         raise HTTPException(404, "Отзыв не найден")
     
     review.admin_reply = None
-    review.admin_reply_at = None
+    review.admin_replied_at = None  # ← ИСПРАВЛЕНО
     review.admin_replied_by = None
     
     db.commit()
@@ -418,7 +416,7 @@ async def edit_admin_reply(
         raise HTTPException(400, "Ответ ещё не добавлен")
     
     review.admin_reply = reply_data.reply.strip()
-    review.admin_reply_at = datetime.utcnow()  # Обновляем дату
+    review.admin_replied_at = datetime.utcnow()  # ← ИСПРАВЛЕНО
     
     db.commit()
     
