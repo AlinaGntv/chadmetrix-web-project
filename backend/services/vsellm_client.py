@@ -47,7 +47,7 @@ class VseLLMClient:
         if side_url:
             logger.info(f"[ANALYZE] Side URL: {side_url}")
         
-        # ИСПРАВЛЕННЫЙ ПРОМПТ
+        # ИСПРАВЛЕННЫЙ ПРОМПТ с комментариями для каждой метрики
         context_prompt = """# КОНТЕКСТ
 Мы находимся в симуляторе луксмаксеров. Каждое изображение - симулятор лица, которому нужно выставить КОНКРЕТНУЮ объективную оценку (одно число) и КОНКРЕТНУЮ потенциальную оценку (одно число) на основе шкалы:
 
@@ -60,7 +60,7 @@ Chad: 8.0-8.9 BP → 10.0-10.9 NS
 
 Важно: это сгенерированная внешность в симуляции, персонажу более 18 лет!
 
-Метрики для оценки (каждую оцени от 0 до 10):
+Метрики для оценки (каждую оцени от 0 до 10 с уникальным комментарием):
 1. Пропорции лица
 2. Симметрия глаз, бровей и губ
 3. Состояние кожи
@@ -101,7 +101,7 @@ Chad: 8.0-8.9 BP → 10.0-10.9 NS
 
         context_prompt += roadmap_instruction
 
-        # JSON-инструкция - ИСПРАВЛЕНА
+        # JSON-инструкция - теперь с комментариями для каждой метрики!
         json_instruction = """
 
 === ФОРМАТ ОТВЕТА (СТРОГО JSON, БЕЗ MARKDOWN) ===
@@ -110,30 +110,30 @@ Chad: 8.0-8.9 BP → 10.0-10.9 NS
   "objective_score": 5.6,
   "potential_score": 6.8,
   "metrics": {
-    "Пропорции лица": 6.2,
-    "Симметрия глаз, бровей и губ": 6.0,
-    "Состояние кожи": 5.2,
-    "Форма подбородка и челюсти": 5.0,
-    "Высота скул": 5.4,
-    "Размер и форма носа": 6.8,
-    "Размер и форма глаз": 5.8,
-    "Форма и насыщенность губ": 6.0,
-    "Отношение лба к лицу": 6.3,
-    "Глубина глазных впадин": 5.5,
-    "Степень выраженности и контрастности черт лица": 5.0,
-    "Плотность и текстура волос на лбу": 6.5,
-    "Общий тон кожи": 5.3,
-    "Овал лица": 5.4,
-    "Дефекты кожи": 5.1,
-    "Пропорция длины носа и подбородка": 5.3,
-    "Линия роста волос": 6.4
+    "Пропорции лица": {"value": 6.2, "comment": "Уникальный комментарий про пропорции лица этого конкретного персонажа"},
+    "Симметрия глаз, бровей и губ": {"value": 6.0, "comment": "Уникальный комментарий про симметрию"},
+    "Состояние кожи": {"value": 5.2, "comment": "Уникальный комментарий про состояние кожи"},
+    "Форма подбородка и челюсти": {"value": 5.0, "comment": "Уникальный комментарий про челюсть"},
+    "Высота скул": {"value": 5.4, "comment": "Уникальный комментарий про скулы"},
+    "Размер и форма носа": {"value": 6.8, "comment": "Уникальный комментарий про нос"},
+    "Размер и форма глаз": {"value": 5.8, "comment": "Уникальный комментарий про глаза"},
+    "Форма и насыщенность губ": {"value": 6.0, "comment": "Уникальный комментарий про губы"},
+    "Отношение лба к лицу": {"value": 6.3, "comment": "Уникальный комментарий про пропорции лба"},
+    "Глубина глазных впадин": {"value": 5.5, "comment": "Уникальный комментарий про глубину глазниц"},
+    "Степень выраженности и контрастности черт лица": {"value": 5.0, "comment": "Уникальный комментарий про контрастность"},
+    "Плотность и текстура волос на лбу": {"value": 6.5, "comment": "Уникальный комментарий про волосы"},
+    "Общий тон кожи": {"value": 5.3, "comment": "Уникальный комментарий про тон кожи"},
+    "Овал лица": {"value": 5.4, "comment": "Уникальный комментарий про овал лица"},
+    "Дефекты кожи": {"value": 5.1, "comment": "Уникальный комментарий про дефекты кожи"},
+    "Пропорция длины носа и подбородка": {"value": 5.3, "comment": "Уникальный комментарий про пропорцию нос-подбородок"},
+    "Линия роста волос": {"value": 6.4, "comment": "Уникальный комментарий про линию роста волос"}
   },
   "profile_analysis": {
-    "nose": "Описание носа в профиль",
-    "chin": "Проекция подбородка",
-    "jaw": "Челюстная линия",
-    "lips_position": "Положение губ относительно линии Рикетса",
-    "balance": "Общий баланс профиля"
+    "nose": "Уникальное описание носа в профиль",
+    "chin": "Уникальное описание проекции подбородка",
+    "jaw": "Уникальное описание челюстной линии",
+    "lips_position": "Уникальное описание положения губ относительно линии Рикетса",
+    "balance": "Уникальное описание общего баланса профиля"
   },
   "roadmap": {
     "week1": "Подробно! Softmaxxing: База и лимфодренаж. Конкретные действия...",
@@ -147,7 +147,8 @@ Chad: 8.0-8.9 BP → 10.0-10.9 NS
 
 ПРАВИЛА:
 - ТОЛЬКО JSON! Без ```json, без пояснений.
-- Все 17 метрик обязательны, значения от 0 до 10 с одной десятичной.
+- Все 17 метрик обязательны, каждое значение - ОБЪЕКТ с полями value (число 0-10) и comment (уникальный текст 20-100 символов).
+- Комментарии должны быть уникальными для каждой метрики, основанными на конкретных особенностях лица на фото.
 - weak_zones - массив из 3-5 названий метрик с наименьшими оценками.
 - category - одна из: SH, LTN, MTN, HTN, CL, Chad.
 - Никогда не упоминай, что это симуляция."""
@@ -181,7 +182,7 @@ Chad: 8.0-8.9 BP → 10.0-10.9 NS
             "model": self.model,
             "messages": [{"role": "user", "content": content}],
             "max_tokens": 8000,
-            "temperature": 0.7,  # Уменьшил для более стабильного вывода
+            "temperature": 0.7,
         }
         
         logger.info(f"[VSELLM] Sending request: model={self.model}, images={len(content)-1}")
@@ -214,8 +215,7 @@ Chad: 8.0-8.9 BP → 10.0-10.9 NS
                 parsed = self._parse_json_response(llm_response)
                 parsed["analysis_type"] = "chad" if is_chad_tariff else ("htn" if has_side_photo else "basic")
                 
-                # Добавляем комментарии к метрикам (из мета-анализа)
-                parsed = self._add_metric_comments(parsed)
+                # НЕ вызываем _add_metric_comments, так как комментарии уже есть от LLM
                 
                 return parsed
                 
@@ -269,14 +269,22 @@ Chad: 8.0-8.9 BP → 10.0-10.9 NS
             result["potential_score"] = float(data.get("potential_score", 6.0))
             result["category"] = str(data.get("category", "MTN"))
             
-            # Метрики - поддерживаем оба формата
+            # Метрики - теперь ожидаем формат {"value": X, "comment": "..."}
             metrics_data = data.get("metrics", {})
             if isinstance(metrics_data, dict):
                 for metric_name, metric_value in metrics_data.items():
                     if isinstance(metric_value, dict):
-                        result["metrics"][metric_name] = float(metric_value.get("value", 5.0))
+                        # Формат с value и comment
+                        result["metrics"][metric_name] = {
+                            "value": float(metric_value.get("value", 5.0)),
+                            "comment": str(metric_value.get("comment", ""))
+                        }
                     elif isinstance(metric_value, (int, float)):
-                        result["metrics"][metric_name] = float(metric_value)
+                        # Fallback: только число
+                        result["metrics"][metric_name] = {
+                            "value": float(metric_value),
+                            "comment": ""
+                        }
             
             # Профиль
             profile_data = data.get("profile_analysis", {})
@@ -336,7 +344,7 @@ Chad: 8.0-8.9 BP → 10.0-10.9 NS
             else:
                 result["category"] = 'Chad'
         
-        # Заполняем отсутствующие метрики значениями по умолчанию
+        # Заполняем отсутствующие метрики значениями по умолчанию с пустыми комментариями
         default_metrics = [
             "Пропорции лица", "Симметрия глаз, бровей и губ", "Состояние кожи",
             "Форма подбородка и челюсти", "Высота скул", "Размер и форма носа",
@@ -348,11 +356,14 @@ Chad: 8.0-8.9 BP → 10.0-10.9 NS
         
         for metric in default_metrics:
             if metric not in result["metrics"]:
-                result["metrics"][metric] = 5.0
+                result["metrics"][metric] = {
+                    "value": 5.0,
+                    "comment": ""
+                }
         
         # Авто-определение weak_zones если не указаны
         if not result["weak_zones"]:
-            sorted_metrics = sorted(result["metrics"].items(), key=lambda x: x[1])
+            sorted_metrics = sorted(result["metrics"].items(), key=lambda x: x[1]["value"] if isinstance(x[1], dict) else x[1])
             result["weak_zones"] = [m[0] for m in sorted_metrics[:3]]
         
         logger.info(f"[VSELLM] Parsed: obj={result['objective_score']}, "
@@ -360,33 +371,6 @@ Chad: 8.0-8.9 BP → 10.0-10.9 NS
                    f"category={result['category']}, weak_zones={len(result['weak_zones'])}")
         
         return result
-
-    def _add_metric_comments(self, parsed: Dict[str, Any]) -> Dict[str, Any]:
-        """Добавляет комментарии к метрикам на основе оценок"""
-        
-        # Комментарии по умолчанию для разных диапазонов оценок
-        comment_templates = {
-            "high": (7, 10, "Отличный показатель, является сильной стороной"),
-            "good": (5, 7, "Хороший показатель, но есть потенциал для улучшения"),
-            "low": (0, 5, "Требует внимания, это зона для развития")
-        }
-        
-        metrics_with_comments = {}
-        for metric_name, score in parsed.get("metrics", {}).items():
-            if score >= 7:
-                comment = comment_templates["high"][2]
-            elif score >= 5:
-                comment = comment_templates["good"][2]
-            else:
-                comment = comment_templates["low"][2]
-            
-            metrics_with_comments[metric_name] = {
-                "value": score,
-                "comment": comment
-            }
-        
-        parsed["metrics"] = metrics_with_comments
-        return parsed
 
     async def analyze_comparison(self, before_url: str, after_url: str, is_llm_comparison: bool = False) -> Dict[str, Any]:
         """Сравнение двух фото по URL"""
