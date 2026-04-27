@@ -182,7 +182,6 @@ Chad: 8.0-8.9 BP → 10.0-10.9 NS
 
         context_prompt += roadmap_instruction
 
-        # JSON-инструкция - теперь с комментариями для каждой метрики!
         json_instruction = """
 
 === ФОРМАТ ОТВЕТА (СТРОГО JSON, БЕЗ MARKDOWN) ===
@@ -216,12 +215,7 @@ Chad: 8.0-8.9 BP → 10.0-10.9 NS
     "lips_position": "Уникальное описание положения губ относительно линии Рикетса",
     "balance": "Уникальное описание общего баланса профиля"
   },
-  "roadmap": {
-    "week1": "Очень подробно! Softmaxxing: База и лимфодренаж. Конкретные действия...",
-    "week2": "Очень подробно! Оптимизация мягких тканей и груминг. Конкретные действия...",
-    "week3": "Очень подробно! Работа с костной проекцией. Мьюинг, жевание, осанка...",
-    "week4": "Очень подробно! Hardmaxxing анализ. Рекомендации по филлерам/хирургии/ортодонтии..."
-  },
+  "roadmap": "ПОДРОБНЫЙ ТЕКСТ РОАДМАПА (5-7 предложений на каждую из 4 недель). Неделя 1: [детальное описание действий на первую неделю, минимум 5 предложений]. Неделя 2: [детальное описание действий на вторую неделю, минимум 5 предложений]. Неделя 3: [детальное описание действий на третью неделю, минимум 5 предложений]. Неделя 4: [детальное описание действий на четвёртую неделю, минимум 5 предложений].",
   "weak_zones": ["метрика1", "метрика2", "метрика3"],
   "category": "MTN"
 }
@@ -232,6 +226,7 @@ Chad: 8.0-8.9 BP → 10.0-10.9 NS
 - Комментарии должны быть уникальными для каждой метрики, основанными на конкретных особенностях лица на фото.
 - weak_zones - массив из 3-5 названий метрик с наименьшими оценками.
 - category - одна из: SH, LTN, MTN, HTN, CL, Chad.
+- **ВАЖНО про роадмап**: поле "roadmap" должно быть СТРОКОЙ (string), а не объектом. Напиши сплошной текст на 20-30 предложений, где чётко выделены 4 недели. Каждая неделя должна содержать минимум 5 предложений с конкретными действиями, использованием профессионального сленга и ссылками на метрики из анализа.
 - Никогда не упоминай, что это симуляция."""
 
         full_prompt = context_prompt + json_instruction
@@ -364,17 +359,19 @@ Chad: 8.0-8.9 BP → 10.0-10.9 NS
                     "balance": str(profile_data.get("balance", ""))
                 }
             
-            # Роадмап
-            roadmap_data = data.get("roadmap", {})
-            if isinstance(roadmap_data, dict):
-                result["roadmap"] = {
-                    "week1": str(roadmap_data.get("week1", "")),
-                    "week2": str(roadmap_data.get("week2", "")),
-                    "week3": str(roadmap_data.get("week3", "")),
-                    "week4": str(roadmap_data.get("week4", ""))
-                }
-            elif isinstance(roadmap_data, str):
+            # Роадмап - теперь ожидаем строку, а не объект
+            roadmap_data = data.get("roadmap", "")
+            if isinstance(roadmap_data, str):
+                # Сохраняем весь текст в week1, остальные пустые (фронтенд сам распарсит по неделям)
                 result["roadmap"]["week1"] = roadmap_data
+            elif isinstance(roadmap_data, dict):
+                # Fallback для старого формата (если вдруг)
+                result["roadmap"]["week1"] = str(roadmap_data.get("week1", ""))
+                result["roadmap"]["week2"] = str(roadmap_data.get("week2", ""))
+                result["roadmap"]["week3"] = str(roadmap_data.get("week3", ""))
+                result["roadmap"]["week4"] = str(roadmap_data.get("week4", ""))
+            else:
+                result["roadmap"]["week1"] = str(roadmap_data)
             
             # Слабые зоны
             weak_zones_data = data.get("weak_zones", [])
