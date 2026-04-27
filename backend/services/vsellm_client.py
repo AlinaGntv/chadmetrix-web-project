@@ -4,6 +4,7 @@ import logging
 import re
 from typing import Dict, Any, Optional
 import httpx
+import asyncio
 
 # Импортируем настройки
 try:
@@ -32,6 +33,86 @@ class VseLLMClient:
         
         logger.info(f"[VSELLM] Initialized: model={self.model}, base_url={self.base_url}")
     
+    async def _call_api_with_retry(
+    self, 
+    payload: Dict[str, Any], 
+    headers: Dict[str, str],
+    max_retries: int = 3,
+    base_delay: float = 1.0
+) -> Dict[str, Any]:
+    """
+    Вызов API с автоматическими повторными попытками при ошибках
+    
+    Args:
+        payload: Тело запроса
+        headers: Заголовки запроса
+        max_retries: Максимальное количество попыток (по умолчанию 3)
+        base_delay: Базовая задержка между попытками в секундах (удваивается с каждой попыткой)
+    
+    Returns:
+        Ответ API в виде JSON
+    
+    Raises:
+        Exception: Если все попытки провалились
+    """
+    last_error = None
+    
+    for attempt in range(max_retries):
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers=headers,
+                    json=payload
+                )
+                
+                # Если успешный ответ (2xx)
+                if 200 <= response.status_code < 300:
+                    return response.json()
+                
+                # Ошибка 5xx (серверная) - стоит повторить
+                if 500 <= response.status_code < 600:
+                    error_text = response.text
+                    logger.warning(f"[VSELLM] Server error {response.status_code} (attempt {attempt + 1}/{max_retries}): {error_text[:200]}")
+                    
+                    # Не повторяем при последней попытке
+                    if attempt == max_retries - 1:
+                        raise Exception(f"VseLLM API error: {response.status_code}: {error_text[:200]}")
+                    
+                    # Ждём перед повтором (экспоненциальная задержка)
+                    delay = base_delay * (2 ** attempt)
+                    logger.info(f"[VSELLM] Retrying in {delay:.1f} seconds...")
+                    await asyncio.sleep(delay)
+                    continue
+                
+                # Другие ошибки (4xx) - не повторяем, сразу выходим
+                error_text = response.text
+                logger.error(f"[VSELLM] Client error {response.status_code}: {error_text[:200]}")
+                raise Exception(f"VseLLM API error: {response.status_code}: {error_text[:200]}")
+                
+        except httpx.TimeoutException as e:
+            logger.warning(f"[VSELLM] Timeout (attempt {attempt + 1}/{max_retries})")
+            last_error = e
+            if attempt < max_retries - 1:
+                delay = base_delay * (2 ** attempt)
+                logger.info(f"[VSELLM] Retrying in {delay:.1f} seconds...")
+                await asyncio.sleep(delay)
+            else:
+                raise Exception(f"VseLLM API timeout after {max_retries} attempts")
+                
+        except Exception as e:
+            logger.error(f"[VSELLM] Unexpected error (attempt {attempt + 1}/{max_retries}): {e}")
+            last_error = e
+            if attempt < max_retries - 1:
+                delay = base_delay * (2 ** attempt)
+                logger.info(f"[VSELLM] Retrying in {delay:.1f} seconds...")
+                await asyncio.sleep(delay)
+            else:
+                raise
+    
+    # Если дошли сюда - все попытки провалились
+    raise Exception(f"All {max_retries} attempts failed. Last error: {last_error}")
+
     async def analyze_face(
         self, 
         photo_url: str, 
@@ -192,39 +273,37 @@ Chad: 8.0-8.9 BP → 10.0-10.9 NS
             "Authorization": f"Bearer {self.api_key}"
         }
         
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers=headers,
-                    json=payload
-                )
-                
-                if response.status_code != 200:
-                    error_text = response.text
-                    logger.error(f"[VSELLM] API error: {response.status_code} - {error_text[:500]}")
-                    raise Exception(f"VseLLM API error: {response.status_code}: {error_text[:200]}")
-                
-                result = response.json()
-                llm_response = result["choices"][0]["message"]["content"]
-                
-                logger.info(f"[VSELLM] Received response: {len(llm_response)} chars")
-                logger.info(f"[VSELLM] First 500 chars: {llm_response[:500]}")
-                
-                # Парсим JSON
-                parsed = self._parse_json_response(llm_response)
-                parsed["analysis_type"] = "chad" if is_chad_tariff else ("htn" if has_side_photo else "basic")
-                
-                # НЕ вызываем _add_metric_comments, так как комментарии уже есть от LLM
-                
-                return parsed
-                
-        except httpx.TimeoutException:
-            logger.error(f"[VSELLM] Request timeout after {self.timeout}")
-            raise Exception("VseLLM API timeout")
-        except Exception as e:
-            logger.error(f"[VSELLM] Error: {e}", exc_info=True)
-            raise
+        async def analyze_face(
+    self, 
+    photo_url: str, 
+    side_url: Optional[str] = None,
+    days: int = 30,
+    has_side_photo: bool = False,
+    is_chad_tariff: bool = False
+) -> Dict[str, Any]:
+    # ... весь код до формирования payload оставляем без изменений ...
+    
+    # ... формируем payload и headers ...
+    
+    # ============ ИЗМЕНЕННАЯ ЧАСТЬ ============
+    try:
+        # Используем retry-механизм с 3 попытками
+        result = await self._call_api_with_retry(payload, headers, max_retries=3)
+        
+        llm_response = result["choices"][0]["message"]["content"]
+        
+        logger.info(f"[VSELLM] Received response: {len(llm_response)} chars")
+        logger.info(f"[VSELLM] First 500 chars: {llm_response[:500]}")
+        
+        # Парсим JSON
+        parsed = self._parse_json_response(llm_response)
+        parsed["analysis_type"] = "chad" if is_chad_tariff else ("htn" if has_side_photo else "basic")
+        
+        return parsed
+        
+    except Exception as e:
+        logger.error(f"[VSELLM] Error after all retries: {e}", exc_info=True)
+        raise
 
     def _parse_json_response(self, raw_response: str) -> Dict[str, Any]:
         """Парсим JSON ответ от LLM с улучшенной обработкой ошибок"""
