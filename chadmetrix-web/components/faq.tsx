@@ -82,7 +82,7 @@ export function FAQ() {
                         <Gift className="w-6 h-6 text-gray-400 mb-3" />
                         <h3 className="font-semibold text-white mb-2">Реферальная программа</h3>
                         <p className="text-sm text-gray-400">
-                            Пригласи друга → получи бесплатный анализ. Друг получит 20% скидку на первый заказ.
+                            Пригласи друга → получи бесплатный анализ.
                         </p>
                     </div>
                     <div className="glass rounded-xl p-6 border border-white/10">
