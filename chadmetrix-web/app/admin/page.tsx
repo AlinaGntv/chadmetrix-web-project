@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { PromocodeManager } from "@/components/admin/PromocodeManager";
+import { ReviewManager } from "@/components/admin/ReviewManager";
 import { api } from "@/lib/api";
 import { Users, Star, CreditCard, BarChart3, DollarSign, Ticket, Loader2 } from "lucide-react";
 
@@ -107,6 +108,10 @@ export default function AdminPage() {
                 {/* Управление промокодами */}
                 <div className="glass rounded-2xl p-6 border border-white/10">
                     <PromocodeManager />
+                </div>
+                {/* Управление отзывами */}
+                <div className="glass rounded-2xl p-6 border border-white/10 mt-6">
+                    <ReviewManager />
                 </div>
             </div>
         </div>

@@ -425,3 +425,118 @@ async def edit_admin_reply(
         "reply": review.admin_reply,
         "replied_at": review.admin_reply_at
     }
+
+# =============================================================================
+# АДМИН ЭНДПОИНТ ДЛЯ СОЗДАНИЯ ФЕЙК-ОТЗЫВОВ
+# =============================================================================
+
+class AdminFakeReviewRequest(BaseModel):
+    user_id: Optional[str] = None
+    user_email: Optional[str] = None
+    user_name: Optional[str] = None
+    rating: int = Field(..., ge=1, le=5)
+    comment: str = Field(..., min_length=1, max_length=1000)
+    created_at: Optional[datetime] = None  # Можно указать дату для имитации старых отзывов
+
+@router.post("/admin/fake")
+async def create_fake_review(
+    review_data: AdminFakeReviewRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Создать отзыв от имени любого пользователя (только для админов)"""
+    
+    ADMIN_EMAILS = ["gntv.surname@gmail.com"]
+    if current_user.email not in ADMIN_EMAILS:
+        raise HTTPException(403, "Только администраторы могут создавать отзывы")
+    
+    # Определяем пользователя
+    target_user = None
+    
+    if review_data.user_id:
+        target_user = db.query(User).filter(User.id == review_data.user_id).first()
+    elif review_data.user_email:
+        target_user = db.query(User).filter(User.email == review_data.user_email).first()
+    
+    # Если пользователь не найден по ID/email, но указано имя — создаём "анонимного" пользователя?
+    if not target_user:
+        if review_data.user_name:
+            # Создаём временного пользователя? Нет, лучше не создавать фейковых юзеров
+            raise HTTPException(404, f"Пользователь не найден. Используйте существующего пользователя")
+        else:
+            raise HTTPException(404, "Пользователь не найден. Укажите user_id или user_email")
+    
+    # Проверяем, не оставлял ли пользователь уже отзыв
+    existing_review = db.query(Review).filter(
+        Review.user_id == target_user.id,
+        Review.is_deleted == False
+    ).first()
+    
+    if existing_review:
+        raise HTTPException(400, f"Пользователь {target_user.email} уже оставил отзыв")
+    
+    # Создаём отзыв
+    review = Review(
+        id=str(uuid.uuid4()),
+        user_id=target_user.id,
+        rating=review_data.rating,
+        comment=review_data.comment,
+        created_at=review_data.created_at or datetime.utcnow()
+    )
+    db.add(review)
+    db.commit()
+    
+    logger.info(f"Admin {current_user.email} created fake review for user {target_user.email}")
+    
+    return {
+        "message": "Отзыв успешно создан",
+        "review_id": review.id,
+        "user": {
+            "id": target_user.id,
+            "email": target_user.email,
+            "name": target_user.full_name
+        }
+    }
+
+
+@router.get("/admin/users")
+async def get_users_for_admin(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    search: Optional[str] = None,
+    limit: int = 50
+):
+    """Получить список пользователей для админ-панели (только для админов)"""
+    
+    ADMIN_EMAILS = ["gntv.surname@gmail.com"]
+    if current_user.email not in ADMIN_EMAILS:
+        raise HTTPException(403, "Доступ запрещён")
+    
+    query = db.query(User).filter(User.is_deleted == False)
+    
+    if search:
+        query = query.filter(
+            (User.email.ilike(f"%{search}%")) |
+            (User.full_name.ilike(f"%{search}%"))
+        )
+    
+    users = query.order_by(User.created_at.desc()).limit(limit).all()
+    
+    # Проверяем, оставлял ли пользователь отзыв
+    result = []
+    for user in users:
+        has_review = db.query(Review).filter(
+            Review.user_id == user.id,
+            Review.is_deleted == False
+        ).first() is not None
+        
+        result.append({
+            "id": user.id,
+            "email": user.email,
+            "full_name": user.full_name,
+            "avatar_url": user.avatar_url,
+            "has_review": has_review,
+            "created_at": user.created_at
+        })
+    
+    return result
