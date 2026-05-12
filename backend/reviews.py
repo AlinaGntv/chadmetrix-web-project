@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from database import get_db
-from models.models import User, Review, Promocode, PromocodeUsage, Payment
+from models.models import User, Review, Promocode, PromocodeUsage, Payment, FakeUser
 from auth import get_current_user
 from pydantic import BaseModel, Field
 from typing import Optional, List
