@@ -1,3 +1,4 @@
+"use client";
 
 import { useState } from "react";
 import { Send, ChevronRight, Gift, Zap, Bell, X } from "lucide-react";
