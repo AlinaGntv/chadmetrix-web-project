@@ -1,21 +1,13 @@
-// components/FloatingTelegramButton.tsx
-"use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Send, ChevronRight, Gift, Zap, Bell, X } from "lucide-react";
 
 export function FloatingTelegramButton() {
     const [isExpanded, setIsExpanded] = useState(false);
-    const [isVisible, setIsVisible] = useState(true);
-
-    // Проверяем, не закрыл ли пользователь кнопку (только после монтирования)
-    useEffect(() => {
-        const dismissed = localStorage.getItem("telegram_button_dismissed");
-        if (dismissed === "true") {
-            setIsVisible(false);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    const [isVisible, setIsVisible] = useState<boolean>(() => {
+        if (typeof window === "undefined") return false;
+        return localStorage.getItem("telegram_button_dismissed") !== "true";
+    });
 
     const handleDismiss = () => {
         setIsVisible(false);
@@ -26,11 +18,9 @@ export function FloatingTelegramButton() {
 
     return (
         <div className="fixed bottom-6 right-6 z-50">
-            {/* Popup карточка */}
             {isExpanded && (
                 <div className="absolute bottom-16 right-0 mb-2 w-80 animate-fade-in">
                     <div className="glass rounded-xl border border-white/10 shadow-xl relative overflow-hidden">
-                        {/* Шапка */}
                         <div className="flex items-center justify-between p-4 border-b border-white/10">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
@@ -50,23 +40,22 @@ export function FloatingTelegramButton() {
                             </button>
                         </div>
 
-                        {/* Контент */}
                         <div className="p-4">
                             <p className="text-gray-400 text-sm mb-3">
-                                🔥 В Telegram-канале публикуем:
+                                В Telegram-канале публикуем:
                             </p>
                             <ul className="space-y-2 mb-4">
                                 <li className="flex items-center gap-2 text-sm text-gray-300">
                                     <Gift className="w-4 h-4 text-white/60" />
-                                    🎁 Промокоды на скидку
+                                    Промокоды на скидку
                                 </li>
                                 <li className="flex items-center gap-2 text-sm text-gray-300">
                                     <Zap className="w-4 h-4 text-white/60" />
-                                    🚀 Анонсы новых функций
+                                    Анонсы новых функций
                                 </li>
                                 <li className="flex items-center gap-2 text-sm text-gray-300">
                                     <Bell className="w-4 h-4 text-white/60" />
-                                    💡 Советы по луксмаксингу
+                                    Советы по луксмаксингу
                                 </li>
                             </ul>
 
@@ -91,7 +80,6 @@ export function FloatingTelegramButton() {
                 </div>
             )}
 
-            {/* Плавающая кнопка */}
             <button
                 onClick={() => setIsExpanded(!isExpanded)}
                 className="group relative w-14 h-14 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 shadow-lg flex items-center justify-center hover:bg-white/20 transition-all duration-300 hover:scale-105"
