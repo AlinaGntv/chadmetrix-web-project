@@ -1,35 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { Send, ChevronRight, Gift, Zap, Bell, X } from "lucide-react";
 
 export function FloatingTelegramButton() {
     const [isExpanded, setIsExpanded] = useState(false);
-    const [isVisible, setIsVisible] = useState<boolean | null>(null);
-    const isMounted = useRef(true);
-
-    useEffect(() => {
-        const dismissed = localStorage.getItem("telegram_button_dismissed");
-        // Используем setTimeout, чтобы обойти строгий ESLint, но с задержкой 0
-        const timer = setTimeout(() => {
-            if (isMounted.current) {
-                setIsVisible(dismissed !== "true");
-            }
-        }, 0);
-        return () => {
-            clearTimeout(timer);
-            isMounted.current = false;
-        };
-    }, []);
-
-    const handleDismiss = () => {
-        setIsVisible(false);
-        localStorage.setItem("telegram_button_dismissed", "true");
-    };
-
-    // Пока состояние не определено — ничего не рендерим (нет мигания)
-    if (isVisible === null) return null;
-    if (!isVisible) return null;
 
     return (
         <div className="fixed bottom-6 right-6 z-50">
@@ -47,7 +22,7 @@ export function FloatingTelegramButton() {
                                 </div>
                             </div>
                             <button
-                                onClick={handleDismiss}
+                                onClick={() => setIsExpanded(false)}
                                 className="p-1 rounded-lg hover:bg-white/10 transition-colors"
                                 aria-label="Закрыть"
                             >
