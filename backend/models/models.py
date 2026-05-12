@@ -118,6 +118,15 @@ class Review(Base):
     user = relationship("User", foreign_keys=[user_id], back_populates="reviews")
     admin = relationship("User", foreign_keys=[admin_replied_by])
 
+class FakeUser(Base):
+    __tablename__ = 'fake_users'
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    name = Column(String, nullable=False)
+    avatar_url = Column(String, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+
 class Promocode(Base):
     __tablename__ = 'promocodes'
     

@@ -139,7 +139,22 @@ async def get_reviews(
     
     result = []
     for review in reviews:
+        # Сначала ищем в обычных пользователях
         user = db.query(User).filter(User.id == review.user_id).first()
+        user_name = None
+        user_avatar = None
+        
+        if user:
+            user_name = user.full_name
+            user_avatar = user.avatar_url
+        else:
+            # Если не нашли в users, ищем в fake_users
+            fake_user = db.query(FakeUser).filter(FakeUser.id == review.user_id).first()
+            if fake_user:
+                user_name = fake_user.name
+                user_avatar = fake_user.avatar_url
+            else:
+                user_name = "Аноним"
         
         # Получаем информацию об админе, который ответил
         admin_info = None
@@ -154,13 +169,13 @@ async def get_reviews(
         result.append({
             "id": review.id,
             "user_id": review.user_id,
-            "user_name": user.full_name if user else "Аноним",
-            "user_avatar": user.avatar_url if user else None,
+            "user_name": user_name,
+            "user_avatar": user_avatar,
             "rating": review.rating,
             "comment": review.comment,
             "created_at": review.created_at,
             "admin_reply": review.admin_reply,
-            "admin_reply_at": review.admin_replied_at,  # Исправлено!
+            "admin_reply_at": review.admin_replied_at,
             "admin_replied_by": admin_info
         })
     
@@ -540,3 +555,155 @@ async def get_users_for_admin(
         })
     
     return result
+
+# =============================================================================
+# АДМИН ЭНДПОИНТЫ ДЛЯ ФЕЙКОВЫХ ОТЗЫВОВ (НЕСУЩЕСТВУЮЩИЕ ПОЛЬЗОВАТЕЛИ)
+# =============================================================================
+
+class FakeUserCreate(BaseModel):
+    name: str
+    avatar_url: Optional[str] = None
+
+class FakeReviewRequest(BaseModel):
+    fake_user_id: Optional[str] = None
+    fake_user_name: Optional[str] = None
+    rating: int = Field(..., ge=1, le=5)
+    comment: str = Field(..., min_length=1, max_length=1000)
+    created_at: Optional[datetime] = None
+
+@router.post("/admin/fake-users")
+async def create_fake_user(
+    user_data: FakeUserCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Создать фейкового пользователя для отзывов (только для админов)"""
+    
+    ADMIN_EMAILS = ["gntv.surname@gmail.com"]
+    if current_user.email not in ADMIN_EMAILS:
+        raise HTTPException(403, "Только администраторы могут создавать фейковых пользователей")
+    
+    fake_user = FakeUser(
+        id=str(uuid.uuid4()),
+        name=user_data.name,
+        avatar_url=user_data.avatar_url
+    )
+    db.add(fake_user)
+    db.commit()
+    
+    logger.info(f"Admin {current_user.email} created fake user: {fake_user.name}")
+    
+    return {
+        "message": "Фейковый пользователь создан",
+        "fake_user": {
+            "id": fake_user.id,
+            "name": fake_user.name,
+            "avatar_url": fake_user.avatar_url
+        }
+    }
+
+
+@router.get("/admin/fake-users")
+async def get_fake_users(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Получить список фейковых пользователей (только для админов)"""
+    
+    ADMIN_EMAILS = ["gntv.surname@gmail.com"]
+    if current_user.email not in ADMIN_EMAILS:
+        raise HTTPException(403, "Доступ запрещён")
+    
+    fake_users = db.query(FakeUser).filter(FakeUser.is_active == True).all()
+    
+    # Проверяем, сколько отзывов у каждого фейкового пользователя
+    result = []
+    for fu in fake_users:
+        review_count = db.query(Review).filter(
+            Review.user_id == fu.id,
+            Review.is_deleted == False
+        ).count()
+        
+        result.append({
+            "id": fu.id,
+            "name": fu.name,
+            "avatar_url": fu.avatar_url,
+            "review_count": review_count,
+            "created_at": fu.created_at
+        })
+    
+    return result
+
+
+@router.post("/admin/fake-review")
+async def create_fake_review_standalone(
+    review_data: FakeReviewRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Создать отзыв от имени фейкового пользователя (не существующего в users)"""
+    
+    ADMIN_EMAILS = ["gntv.surname@gmail.com"]
+    if current_user.email not in ADMIN_EMAILS:
+        raise HTTPException(403, "Только администраторы могут создавать фейковые отзывы")
+    
+    # Определяем фейкового пользователя
+    fake_user = None
+    
+    if review_data.fake_user_id:
+        fake_user = db.query(FakeUser).filter(
+            FakeUser.id == review_data.fake_user_id,
+            FakeUser.is_active == True
+        ).first()
+    elif review_data.fake_user_name:
+        fake_user = db.query(FakeUser).filter(
+            FakeUser.name == review_data.fake_user_name,
+            FakeUser.is_active == True
+        ).first()
+    
+    if not fake_user:
+        raise HTTPException(404, "Фейковый пользователь не найден. Сначала создайте его через /admin/fake-users")
+    
+    # Создаём отзыв (user_id = id фейкового пользователя)
+    review = Review(
+        id=str(uuid.uuid4()),
+        user_id=fake_user.id,  # Важно: это ID из fake_users, НЕ из users!
+        rating=review_data.rating,
+        comment=review_data.comment,
+        created_at=review_data.created_at or datetime.utcnow()
+    )
+    db.add(review)
+    db.commit()
+    
+    logger.info(f"Admin {current_user.email} created fake review for {fake_user.name}")
+    
+    return {
+        "message": "Фейковый отзыв успешно создан",
+        "review_id": review.id,
+        "fake_user": {
+            "id": fake_user.id,
+            "name": fake_user.name
+        }
+    }
+
+
+@router.delete("/admin/fake-users/{fake_user_id}")
+async def delete_fake_user(
+    fake_user_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Удалить фейкового пользователя (мягкое удаление)"""
+    
+    ADMIN_EMAILS = ["gntv.surname@gmail.com"]
+    if current_user.email not in ADMIN_EMAILS:
+        raise HTTPException(403, "Только администраторы могут удалять фейковых пользователей")
+    
+    fake_user = db.query(FakeUser).filter(FakeUser.id == fake_user_id).first()
+    if not fake_user:
+        raise HTTPException(404, "Фейковый пользователь не найден")
+    
+    fake_user.is_active = False
+    db.commit()
+    
+    return {"message": f"Фейковый пользователь {fake_user.name} удалён"}
