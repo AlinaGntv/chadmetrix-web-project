@@ -4,6 +4,7 @@ import { Onest } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
+import { FloatingTelegramButton } from "@/components/FloatingTelegramButton";
 
 const onest = Onest({
   subsets: ["latin", "cyrillic"],
@@ -90,7 +91,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ru" className="dark">
+    <html lang="ru" className="dark" suppressHydrationWarning>
       <head>
         {/* SEO / Verification */}
         <meta name="yandex-verification" content="ваш-код-верификации" />
@@ -148,6 +149,7 @@ export default function RootLayout({
           </main>
           <Footer />
         </div>
+        <FloatingTelegramButton />
       </body>
     </html>
   );
