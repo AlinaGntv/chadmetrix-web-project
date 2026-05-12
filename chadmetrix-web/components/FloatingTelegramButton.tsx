@@ -1,14 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Send, ChevronRight, Gift, Zap, Bell, X } from "lucide-react";
 
 export function FloatingTelegramButton() {
     const [isExpanded, setIsExpanded] = useState(false);
-    const [isVisible, setIsVisible] = useState<boolean>(() => {
-        if (typeof window === "undefined") return false;
-        return localStorage.getItem("telegram_button_dismissed") !== "true";
-    });
+    const [isVisible, setIsVisible] = useState(true);
+
+    useEffect(() => {
+        const dismissed = localStorage.getItem("telegram_button_dismissed");
+        if (dismissed === "true") {
+            setIsVisible(false);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const handleDismiss = () => {
         setIsVisible(false);
