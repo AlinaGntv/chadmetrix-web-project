@@ -12,7 +12,7 @@ try:
 except ImportError:
     class FallbackSettings:
         VSELM_API_KEY = os.getenv("VSELM_API_KEY")
-        VSELM_BASE_URL = os.getenv("VSELM_BASE_URL", "https://api.vsellm.ru/v1")
+        VSELM_BASE_URL = os.getenv("VSELM_BASE_URL", "https://polza.ai/api/v1")
         VSELM_MODEL = os.getenv("VSELM_MODEL", "google/gemini-2.5-pro")
     settings = FallbackSettings()
 
