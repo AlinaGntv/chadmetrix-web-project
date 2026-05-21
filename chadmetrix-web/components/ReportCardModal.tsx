@@ -122,9 +122,13 @@ export function ReportCardModal({
                 background: "rgba(0,0,0,0.80)",
                 backdropFilter: "blur(8px)",
                 display: "flex",
-                alignItems: "center",
+                alignItems: "flex-start",
                 justifyContent: "center",
-                padding: "1rem",
+                paddingTop: "88px",
+                paddingBottom: "1.5rem",
+                paddingLeft: "1rem",
+                paddingRight: "1rem",
+                overflowY: "auto",
                 animation: "cmFadeIn 0.18s ease",
             }}
         >
@@ -141,10 +145,9 @@ export function ReportCardModal({
                 borderRadius: "24px",
                 width: "100%",
                 maxWidth: "380px",
-                maxHeight: "90vh",
-                overflowY: "auto",
                 animation: "cmSlideUp 0.22s ease",
                 position: "relative",
+                flexShrink: 0,
                 boxShadow: "0 0 60px -15px rgba(255,255,255,0.08), 0 32px 80px rgba(0,0,0,0.7)",
             }}>
 
