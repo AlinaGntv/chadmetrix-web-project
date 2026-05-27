@@ -8,6 +8,7 @@ import { getReports } from "@/lib/api";
 import Link from "next/link";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 
 interface ReportData {
     id: string;
@@ -26,7 +27,7 @@ interface Report {
 
 type SortOption = "newest" | "oldest" | "score-high" | "score-low";
 
-export default function ReportsPage() {
+function ReportsContent() {
     const { user } = useAuth();
     const searchParams = useSearchParams();
     const pendingAnalysisId = searchParams.get("pending");
@@ -272,5 +273,17 @@ export default function ReportsPage() {
                 )}
             </div>
         </div>
+    );
+}
+
+export default function ReportsPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen pt-24 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+            </div>
+        }>
+            <ReportsContent />
+        </Suspense>
     );
 }
