@@ -20,10 +20,13 @@ export function UploadForm() {
     const [uploadStage, setUploadStage] = useState<"idle" | "uploading" | "processing">("idle");
     const [pollingSeconds, setPollingSeconds] = useState(0);
 
-    // Флаг для отмены поллинга при размонтировании компонента
-    const isMountedRef = useRef(true);
+    // AbortController для явной отмены поллинга
+    const pollAbortRef = useRef<AbortController | null>(null);
     useEffect(() => {
-        return () => { isMountedRef.current = false; };
+        return () => {
+            // Компонент размонтирован — убиваем поллинг
+            pollAbortRef.current?.abort();
+        };
     }, []);
 
     useEffect(() => {
@@ -62,43 +65,60 @@ export function UploadForm() {
                 readFile(e.target.files[0], type);
             };
 
-    // ── Поллинг: 5 минут, раз в 2 сек, не трогает auth ──────────────────────
+    // ── Поллинг: 5 минут, раз в 2 сек, с явной отменой через AbortController ──
     const waitForReport = async (analysisId: string): Promise<string | null> => {
+        // Отменяем предыдущий поллинг если был
+        pollAbortRef.current?.abort();
+        const controller = new AbortController();
+        pollAbortRef.current = controller;
+
         const maxAttempts = 150;  // 150 × 2сек = 5 минут
         const delay = 2000;
         let elapsed = 0;
 
         for (let i = 0; i < maxAttempts; i++) {
-            // Компонент размонтирован (юзер ушёл со страницы) — прекращаем
-            if (!isMountedRef.current) return null;
+            // Поллинг отменён (навигация или новый запрос)
+            if (controller.signal.aborted) return null;
 
             try {
                 const res = await fetch(`/api/analysis/${analysisId}/status`, {
                     credentials: "include",
+                    signal: controller.signal,
                 });
 
-                // 401 во время поллинга — не редиректим, просто останавливаемся
+                // 401 — останавливаемся без редиректа
                 if (res.status === 401) {
-                    console.warn("[polling] 401 during status check — stopping");
+                    console.warn("[polling] 401 — stopping");
                     return null;
                 }
 
                 if (res.ok) {
                     const data = await res.json();
-                    if (data.has_report && data.report_id) return data.report_id;
+                    if (data.has_report && data.report_id) {
+                        pollAbortRef.current = null;
+                        return data.report_id;
+                    }
                     if (data.status === "failed") return null;
                 }
-            } catch (e) {
+            } catch (e: unknown) {
+                // AbortError — нормальная отмена, выходим тихо
+                if (e instanceof Error && e.name === "AbortError") return null;
                 console.warn("[polling] fetch error:", e);
             }
 
-            await new Promise(resolve => setTimeout(resolve, delay));
-            elapsed += delay;
+            // Ждём с проверкой отмены
+            await new Promise<void>((resolve, reject) => {
+                const timer = setTimeout(resolve, delay);
+                controller.signal.addEventListener("abort", () => {
+                    clearTimeout(timer);
+                    reject(new DOMException("Aborted", "AbortError"));
+                });
+            }).catch(() => null);
 
-            // Обновляем таймер только если компонент ещё смонтирован
-            if (isMountedRef.current) {
-                setPollingSeconds(Math.round(elapsed / 1000));
-            }
+            if (controller.signal.aborted) return null;
+
+            elapsed += delay;
+            setPollingSeconds(Math.round(elapsed / 1000));
         }
 
         return null;
@@ -145,8 +165,6 @@ export function UploadForm() {
 
             const reportId = await waitForReport(analysisId);
 
-            if (!isMountedRef.current) return;
-
             if (reportId) {
                 router.push(`/reports/${reportId}`);
             } else {
@@ -159,10 +177,8 @@ export function UploadForm() {
             console.error(e);
             alert(e instanceof Error ? e.message : "Ошибка загрузки");
         } finally {
-            if (isMountedRef.current) {
-                setIsUploading(false);
-                setUploadStage("idle");
-            }
+            setIsUploading(false);
+            setUploadStage("idle");
         }
     };
 
