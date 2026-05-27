@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { ReportCard } from "@/components/report-card";
-import { Filter, Search, ChevronDown, Loader2, BarChart3 } from "lucide-react";
+import { Filter, Search, ChevronDown, Loader2, BarChart3, Clock, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getReports } from "@/lib/api";
 import Link from "next/link";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useSearchParams } from "next/navigation";
 
-// Интерфейс на основе реального ответа API
 interface ReportData {
     id: string;
     overall_score?: number | null;
@@ -28,6 +28,9 @@ type SortOption = "newest" | "oldest" | "score-high" | "score-low";
 
 export default function ReportsPage() {
     const { user } = useAuth();
+    const searchParams = useSearchParams();
+    const pendingAnalysisId = searchParams.get("pending");
+
     const [reports, setReports] = useState<Report[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
@@ -35,66 +38,98 @@ export default function ReportsPage() {
     const [showFilters, setShowFilters] = useState(false);
     const [scoreFilter, setScoreFilter] = useState<{ min: number; max: number } | null>(null);
 
-    // Проверяем, есть ли у пользователя доступ к сравнению (HTN или CHAD тариф)
+    // Pending-анализ: поллим пока не появится отчёт
+    const [pendingDone, setPendingDone] = useState(false);
+    const [pendingSeconds, setPendingSeconds] = useState(0);
+    const isMountedRef = useRef(true);
+    useEffect(() => { return () => { isMountedRef.current = false; }; }, []);
+
     const tariffType = user?.tariff_type?.toLowerCase();
     const canCompare = tariffType === "htn" || tariffType === "chad";
 
-    // Загрузка реальных отчётов
-    useEffect(() => {
-        const fetchReports = async () => {
-            try {
-                const data = await getReports() as ReportData[];
-                // Преобразуем данные из API в нужный формат
-                const formatted: Report[] = data.map((item: ReportData) => ({
-                    id: item.id,
-                    // Берём overall_score напрямую из корня объекта
-                    score: item.overall_score ?? 0,
-                    date: item.created_at || new Date().toISOString(),
-                }));
-                setReports(formatted);
-            } catch (error) {
-                console.error("Failed to load reports:", error);
-            } finally {
-                setLoading(false);
-            }
-        };
+    const fetchReports = async () => {
+        try {
+            const data = await getReports() as ReportData[];
+            const formatted: Report[] = data.map((item: ReportData) => ({
+                id: item.id,
+                score: item.overall_score ?? 0,
+                date: item.created_at || new Date().toISOString(),
+            }));
+            setReports(formatted);
+        } catch (error) {
+            console.error("Failed to load reports:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
+    useEffect(() => {
         fetchReports();
     }, []);
 
-    // Фильтрация и сортировка
+    // ── Поллинг pending-анализа прямо на странице /reports ───────────────────
+    useEffect(() => {
+        if (!pendingAnalysisId || pendingDone) return;
+
+        let elapsed = 0;
+        const interval = setInterval(async () => {
+            if (!isMountedRef.current) { clearInterval(interval); return; }
+
+            elapsed += 3000;
+            setPendingSeconds(Math.round(elapsed / 1000));
+
+            try {
+                const res = await fetch(`/api/analysis/${pendingAnalysisId}/status`, {
+                    credentials: "include",
+                });
+
+                // 401 — не трогаем auth, просто останавливаем поллинг
+                if (res.status === 401) { clearInterval(interval); return; }
+                if (!res.ok) return;
+
+                const data = await res.json();
+
+                if (data.has_report && data.report_id) {
+                    clearInterval(interval);
+                    setPendingDone(true);
+                    // Перезагружаем список отчётов без перезагрузки страницы
+                    await fetchReports();
+                    // Убираем ?pending= из URL без перехода
+                    window.history.replaceState({}, "", "/reports");
+                }
+
+                // Максимум 5 минут
+                if (elapsed >= 300_000) clearInterval(interval);
+
+            } catch (e) {
+                console.warn("[pending poll] error:", e);
+            }
+        }, 3000);
+
+        return () => clearInterval(interval);
+    }, [pendingAnalysisId, pendingDone]);
+
     const filteredReports = useMemo(() => {
         let result = [...reports];
 
-        // Поиск по ID или оценке
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
-            result = result.filter(report =>
-                report.id.toLowerCase().includes(query) ||
-                report.score.toString().includes(query)
+            result = result.filter(r =>
+                r.id.toLowerCase().includes(query) || r.score.toString().includes(query)
             );
         }
 
-        // Фильтр по оценке
         if (scoreFilter) {
-            result = result.filter(report =>
-                report.score >= scoreFilter.min && report.score <= scoreFilter.max
-            );
+            result = result.filter(r => r.score >= scoreFilter.min && r.score <= scoreFilter.max);
         }
 
-        // Сортировка
         result.sort((a, b) => {
             switch (sortBy) {
-                case "newest":
-                    return new Date(b.date).getTime() - new Date(a.date).getTime();
-                case "oldest":
-                    return new Date(a.date).getTime() - new Date(b.date).getTime();
-                case "score-high":
-                    return b.score - a.score;
-                case "score-low":
-                    return a.score - b.score;
-                default:
-                    return 0;
+                case "newest": return new Date(b.date).getTime() - new Date(a.date).getTime();
+                case "oldest": return new Date(a.date).getTime() - new Date(b.date).getTime();
+                case "score-high": return b.score - a.score;
+                case "score-low": return a.score - b.score;
+                default: return 0;
             }
         });
 
@@ -112,16 +147,35 @@ export default function ReportsPage() {
     return (
         <div className="min-h-screen pt-24 pb-12 px-4 sm:px-6 lg:px-8">
             <div className="max-w-7xl mx-auto">
+
+                {/* ── Pending-баннер ── */}
+                {pendingAnalysisId && !pendingDone && (
+                    <div className="glass rounded-2xl p-4 border border-white/10 mb-6 flex items-center gap-3">
+                        <Loader2 className="w-5 h-5 animate-spin text-gray-400 shrink-0" />
+                        <div>
+                            <p className="text-white text-sm font-medium">Анализ обрабатывается...</p>
+                            <p className="text-gray-500 text-xs flex items-center gap-1 mt-0.5">
+                                <Clock className="w-3 h-3" />
+                                {pendingSeconds} сек — обычно 1–2 минуты. Страница обновится автоматически.
+                            </p>
+                        </div>
+                    </div>
+                )}
+
+                {pendingDone && (
+                    <div className="glass rounded-2xl p-4 border border-white/10 mb-6 flex items-center gap-3">
+                        <CheckCircle2 className="w-5 h-5 text-white shrink-0" />
+                        <p className="text-white text-sm font-medium">Анализ готов — смотри в списке ниже</p>
+                    </div>
+                )}
+
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
                     <div>
                         <h1 className="text-3xl font-bold text-white mb-2">Мои отчёты</h1>
-                        <p className="text-gray-400">
-                            {filteredReports.length} отчётов
-                        </p>
+                        <p className="text-gray-400">{filteredReports.length} отчётов</p>
                     </div>
 
                     <div className="mt-4 md:mt-0 flex flex-col sm:flex-row gap-3">
-                        {/* Поиск */}
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                             <input
@@ -133,7 +187,6 @@ export default function ReportsPage() {
                             />
                         </div>
 
-                        {/* Сортировка */}
                         <div className="relative">
                             <select
                                 value={sortBy}
@@ -148,20 +201,15 @@ export default function ReportsPage() {
                             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
                         </div>
 
-                        {/* Кнопка сравнения - только для HTN/CHAD */}
                         {canCompare && (
                             <Link href="/analysis/compare">
-                                <Button
-                                    variant="outline"
-                                    className="glass border-white/20 hover:bg-white/10"
-                                >
+                                <Button variant="outline" className="glass border-white/20 hover:bg-white/10">
                                     <BarChart3 className="w-4 h-4 mr-2" />
                                     Сравнить анализы
                                 </Button>
                             </Link>
                         )}
 
-                        {/* Фильтр */}
                         <Button
                             variant="outline"
                             onClick={() => setShowFilters(!showFilters)}
@@ -173,48 +221,34 @@ export default function ReportsPage() {
                     </div>
                 </div>
 
-                {/* Панель фильтров */}
                 {showFilters && (
                     <div className="glass rounded-2xl p-6 border border-white/10 mb-8">
                         <h3 className="text-white font-semibold mb-4">Фильтр по оценке</h3>
                         <div className="flex gap-2 flex-wrap">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setScoreFilter(null)}
-                                className={!scoreFilter ? "bg-white/20" : "glass border-white/10"}
-                            >
-                                Все
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setScoreFilter({ min: 8, max: 10 })}
-                                className={scoreFilter?.min === 8 ? "bg-white/20" : "glass border-white/10"}
-                            >
-                                8+ (Отлично)
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setScoreFilter({ min: 6, max: 7.9 })}
-                                className={scoreFilter?.min === 6 ? "bg-white/20" : "glass border-white/10"}
-                            >
-                                6-8 (Хорошо)
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setScoreFilter({ min: 0, max: 5.9 })}
-                                className={scoreFilter?.min === 0 ? "bg-white/20" : "glass border-white/10"}
-                            >
-                                {"<6 (Нужна работа)"}
-                            </Button>
+                            {[
+                                { label: "Все", filter: null },
+                                { label: "8+ (Отлично)", filter: { min: 8, max: 10 } },
+                                { label: "6–8 (Хорошо)", filter: { min: 6, max: 7.9 } },
+                                { label: "<6 (Нужна работа)", filter: { min: 0, max: 5.9 } },
+                            ].map(({ label, filter }) => (
+                                <Button
+                                    key={label}
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setScoreFilter(filter)}
+                                    className={
+                                        JSON.stringify(scoreFilter) === JSON.stringify(filter)
+                                            ? "bg-white/20"
+                                            : "glass border-white/10"
+                                    }
+                                >
+                                    {label}
+                                </Button>
+                            ))}
                         </div>
                     </div>
                 )}
 
-                {/* Список отчётов */}
                 {filteredReports.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {filteredReports.map((report) => (
