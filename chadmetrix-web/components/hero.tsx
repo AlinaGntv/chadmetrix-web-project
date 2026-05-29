@@ -14,7 +14,7 @@ export function Hero() {
                 <div className="text-center max-w-4xl mx-auto">
                     <div className="inline-flex items-center space-x-2 glass rounded-full px-4 py-1.5 mb-8 border border-white/20">
                         <Users className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm text-gray-300">200+ анализов проведено</span>
+                        <span className="text-sm text-gray-300">300+ анализов проведено</span>
                     </div>
 
                     <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-6 text-gradient leading-tight">

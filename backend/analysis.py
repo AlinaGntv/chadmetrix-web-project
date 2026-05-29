@@ -591,12 +591,24 @@ async def _process_analysis(analysis_id, front_url, side_url, user_id,
         db.flush()
 
         analysis.report_id = report.id
+        analysis.status = "completed"
         db.commit()
         logger.info(f"[ANALYSIS] {analysis_id} completed, report_id={report.id}")
 
     except Exception as e:
         logger.error(f"[ANALYSIS] Failed {analysis_id}: {e}", exc_info=True)
         db.rollback()
+        # Сохраняем статус failed чтобы фронт остановил поллинг
+        try:
+            fail_db = SessionLocal()
+            failed_analysis = fail_db.query(Analysis).filter(Analysis.id == analysis_id).first()
+            if failed_analysis:
+                failed_analysis.status = "failed"
+                fail_db.commit()
+                logger.info(f"[ANALYSIS] {analysis_id} marked as failed")
+            fail_db.close()
+        except Exception as db_err:
+            logger.error(f"[ANALYSIS] Could not mark as failed: {db_err}")
         raise
 
 
@@ -659,10 +671,19 @@ def get_analysis_status(
         raise HTTPException(404, "Analysis not found")
 
     has_report = analysis.report_id is not None
+    # Читаем реальный статус из БД
+    db_status = getattr(analysis, "status", None)
+
+    if has_report:
+        final_status = "completed"
+    elif db_status == "failed":
+        final_status = "failed"
+    else:
+        final_status = "processing"
 
     return {
         "analysis_id": analysis_id,
-        "status": "completed" if has_report else "processing",
+        "status": final_status,
         "has_report": has_report,
         "report_id": analysis.report_id
     }
