@@ -68,23 +68,25 @@ class VseLLMClient:
                     raise Exception(f"VseLLM API error: {response.status_code}: {error_text[:200]}")
 
             except httpx.TimeoutException as e:
-                logger.warning(f"[VSELLM] Timeout (attempt {attempt + 1}/{max_retries})")
+                logger.warning(f"[VSELLM] Timeout (attempt {attempt + 1}/{max_retries}): {e}")
                 last_error = e
                 if attempt < max_retries - 1:
                     delay = base_delay * (2 ** attempt)
                     logger.info(f"[VSELLM] Retrying in {delay:.1f} seconds...")
                     await asyncio.sleep(delay)
                 else:
+                    logger.error(f"[VSELLM] All {max_retries} attempts timed out")
                     raise Exception(f"VseLLM API timeout after {max_retries} attempts")
 
             except Exception as e:
-                logger.error(f"[VSELLM] Unexpected error (attempt {attempt + 1}/{max_retries}): {e}")
+                logger.error(f"[VSELLM] Unexpected error (attempt {attempt + 1}/{max_retries}): {type(e).__name__}: {e}")
                 last_error = e
                 if attempt < max_retries - 1:
                     delay = base_delay * (2 ** attempt)
                     logger.info(f"[VSELLM] Retrying in {delay:.1f} seconds...")
                     await asyncio.sleep(delay)
                 else:
+                    logger.error(f"[VSELLM] All {max_retries} attempts failed with: {type(last_error).__name__}")
                     raise
 
         raise Exception(f"All {max_retries} attempts failed. Last error: {last_error}")
@@ -239,8 +241,10 @@ Chad: 8.0-8.9 BP → 10.0-10.9 NS
             "Authorization": f"Bearer {self.api_key}"
         }
 
+        logger.info(f"[VSELLM] About to call API with {self.base_url}/chat/completions")
         try:
             result = await self._call_api_with_retry(payload, headers, max_retries=3)
+            logger.info(f"[VSELLM] API call returned successfully")
 
             # ── НОВОЕ: логируем finish_reason чтобы понять причину пустого ответа ──
             choice = result.get("choices", [{}])[0]
