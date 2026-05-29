@@ -48,11 +48,11 @@ export default function NewAnalysisPage() {
                 </div>
 
                 <div className="mt-12 glass rounded-2xl p-8 border border-white/10">
-                    <h3 className="text-lg font-semibold text-white mb-4">Советы для лучшего результата:</h3>
+                    <h3 className="text-lg font-semibold text-white mb-4">Как получить правильный результат:</h3>
                     <ul className="grid grid-cols-1 md:grid-cols-2 gap-3 text-gray-400">
                         <li className="flex items-center space-x-2">
                             <span className="w-1.5 h-1.5 bg-white rounded-full" />
-                            <span>Хорошее освещение лица без теней</span>
+                            <span>Фото обязательно в одежде, не должно быть видно оголенных частей тела (ключицы, грудь и т.д.)</span>
                         </li>
                         <li className="flex items-center space-x-2">
                             <span className="w-1.5 h-1.5 bg-white rounded-full" />
@@ -68,7 +68,7 @@ export default function NewAnalysisPage() {
                         </li>
                         <li className="flex items-center space-x-2">
                             <span className="w-1.5 h-1.5 bg-white rounded-full" />
-                            <span>Разрешение не менее 512×512</span>
+                            <span>Хорошее освещение лица без теней</span>
                         </li>
                         <li className="flex items-center space-x-2">
                             <span className="w-1.5 h-1.5 bg-white rounded-full" />
