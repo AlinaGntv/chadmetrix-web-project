@@ -8,6 +8,7 @@ import logging
 from io import BytesIO
 from typing import Optional, List
 from datetime import datetime
+import asyncio
 
 from PIL import Image, ExifTags
 
@@ -529,19 +530,62 @@ def process_analysis_task(analysis_id, front_url, side_url, user_id, has_side_ph
 
 async def _process_analysis(analysis_id, front_url, side_url, user_id,
                              has_side_photo, is_chad_tariff, db):
+    MAX_LLM_RETRIES = 3
+    RETRY_BASE_DELAY = 2.0
+
+    last_error = None
+    result = None
+
+    for attempt in range(1, MAX_LLM_RETRIES + 1):
+        try:
+            logger.info(f"[ANALYSIS] Starting LLM for {analysis_id}, attempt {attempt}/{MAX_LLM_RETRIES}, side={has_side_photo}, chad={is_chad_tariff}")
+
+            result = await vsellm_client.analyze_face(
+                front_url, side_url=side_url, days=30,
+                has_side_photo=has_side_photo, is_chad_tariff=is_chad_tariff
+            )
+
+            logger.info(
+                f"[ANALYSIS] LLM returned: obj={result.get('objective_score')}, "
+                f"pot={result.get('potential_score')}, metrics={len(result.get('metrics', {}))}"
+            )
+
+            break
+
+        except Exception as e:
+            last_error = e
+            error_str = str(e).lower()
+
+            if "safety" in error_str or "content_filter" in error_str or "фильтрам безопасности" in error_str:
+                logger.error(f"[ANALYSIS] Non-retriable safety error for {analysis_id}: {e}")
+                break
+
+            if attempt < MAX_LLM_RETRIES:
+                delay = RETRY_BASE_DELAY * (2 ** (attempt - 1))
+                logger.warning(
+                    f"[ANALYSIS] Attempt {attempt}/{MAX_LLM_RETRIES} failed for {analysis_id}: {e}. "
+                    f"Retrying in {delay:.1f}s..."
+                )
+                await asyncio.sleep(delay)
+            else:
+                logger.error(f"[ANALYSIS] All {MAX_LLM_RETRIES} attempts exhausted for {analysis_id}: {e}")
+
+    if result is None:
+        logger.error(f"[ANALYSIS] Failed {analysis_id}: {last_error}", exc_info=True)
+        db.rollback()
+        try:
+            fail_db = SessionLocal()
+            failed_analysis = fail_db.query(Analysis).filter(Analysis.id == analysis_id).first()
+            if failed_analysis:
+                failed_analysis.status = "failed"
+                fail_db.commit()
+                logger.info(f"[ANALYSIS] {analysis_id} marked as failed")
+            fail_db.close()
+        except Exception as db_err:
+            logger.error(f"[ANALYSIS] Could not mark as failed: {db_err}")
+        raise last_error
+
     try:
-        logger.info(f"[ANALYSIS] Starting LLM for {analysis_id}, side={has_side_photo}, chad={is_chad_tariff}")
-
-        result = await vsellm_client.analyze_face(
-            front_url, side_url=side_url, days=30,
-            has_side_photo=has_side_photo, is_chad_tariff=is_chad_tariff
-        )
-
-        logger.info(
-            f"[ANALYSIS] LLM returned: obj={result.get('objective_score')}, "
-            f"pot={result.get('potential_score')}, metrics={len(result.get('metrics', {}))}"
-        )
-
         analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first()
         if not analysis:
             logger.error(f"[ANALYSIS] {analysis_id} not found in DB")
@@ -596,9 +640,8 @@ async def _process_analysis(analysis_id, front_url, side_url, user_id,
         logger.info(f"[ANALYSIS] {analysis_id} completed, report_id={report.id}")
 
     except Exception as e:
-        logger.error(f"[ANALYSIS] Failed {analysis_id}: {e}", exc_info=True)
+        logger.error(f"[ANALYSIS] Failed to save result for {analysis_id}: {e}", exc_info=True)
         db.rollback()
-        # Сохраняем статус failed чтобы фронт остановил поллинг
         try:
             fail_db = SessionLocal()
             failed_analysis = fail_db.query(Analysis).filter(Analysis.id == analysis_id).first()
