@@ -10,7 +10,6 @@ import jwt
 from fastapi import APIRouter, HTTPException, Request, Depends, Response
 from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
 from sqlalchemy.orm import Session
-from passlib.context import CryptContext
 
 from database import get_db
 from models.models import User, Referral
@@ -62,6 +61,34 @@ def set_auth_cookie(response: Response, token: str):
         # domain не указываем — браузер сам проставит текущий домен
         # (явный domain ломает cookie на некоторых Android браузерах)
     )
+
+
+def _error_html_page(message: str) -> HTMLResponse:
+    """Вернуть красивую HTML-страницу с ошибкой вместо 500"""
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ошибка входа</title>
+  <style>
+    body {{ background: #000; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; font-family: sans-serif; }}
+    .card {{ background: #111; border: 1px solid #333; border-radius: 12px; padding: 40px; max-width: 400px; text-align: center; }}
+    h1 {{ color: #ff4444; font-size: 24px; margin-bottom: 12px; }}
+    p {{ color: #aaa; font-size: 14px; line-height: 1.5; }}
+    a {{ color: #6b9fff; text-decoration: none; }}
+    a:hover {{ text-decoration: underline; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Ошибка входа</h1>
+    <p>{message}</p>
+    <p><a href="/login">Попробовать снова</a></p>
+  </div>
+</body>
+</html>"""
+    return HTMLResponse(content=html, status_code=400)
 
 
 def get_current_user(
@@ -137,7 +164,6 @@ async def login_google(request: Request):
 @router.get("/callback/google")
 async def callback_google(
     request: Request,
-    response: Response,
     code: str | None = None,
     state: str | None = None,
     error: str | None = None,
@@ -147,16 +173,16 @@ async def callback_google(
 
     if error:
         logger.warning("Google returned OAuth error: %s", error)
-        raise HTTPException(status_code=400, detail=f"Google OAuth error: {error}")
+        return _error_html_page(f"Google OAuth error: {error}")
 
     if not code:
         logger.error("Missing authorization code")
-        raise HTTPException(status_code=400, detail="Missing authorization code")
+        return _error_html_page("Missing authorization code")
 
     cookie_state = request.cookies.get("oauth_state")
     if cookie_state and state != cookie_state:
         logger.warning("State mismatch: cookie=%s param=%s", cookie_state, state)
-        raise HTTPException(status_code=400, detail="State mismatch")
+        return _error_html_page("State mismatch")
 
     ref_code = request.cookies.get("ref_code")
 
@@ -168,32 +194,52 @@ async def callback_google(
         "grant_type": "authorization_code",
     }
 
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        token_response = await client.post(
-            GOOGLE_TOKEN_URL,
-            data=token_data,
-            headers={"Accept": "application/json"},
-        )
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            token_response = await client.post(
+                GOOGLE_TOKEN_URL,
+                data=token_data,
+                headers={"Accept": "application/json"},
+            )
 
-        if token_response.status_code != 200:
-            logger.error("Token exchange failed: %s", token_response.text)
-            raise HTTPException(status_code=400, detail="Failed to get token from Google")
+            if token_response.status_code != 200:
+                logger.error("Token exchange failed: %s", token_response.text[:500])
+                return _error_html_page("Failed to verify authorization with Google. Please try again.")
 
-        tokens = token_response.json()
-        access_token = tokens.get("access_token")
+            try:
+                tokens = token_response.json()
+            except Exception:
+                logger.error("Token response parse failed: %s", token_response.text[:500])
+                return _error_html_page("Invalid response from Google. Please try again.")
 
-        if not access_token:
-            raise HTTPException(status_code=400, detail="No access token received")
+            access_token = tokens.get("access_token")
 
-        userinfo_response = await client.get(
-            GOOGLE_USERINFO_URL,
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
+            if not access_token:
+                return _error_html_page("No access token received from Google.")
 
-        if userinfo_response.status_code != 200:
-            raise HTTPException(status_code=400, detail="Failed to get user info")
+            userinfo_response = await client.get(
+                GOOGLE_USERINFO_URL,
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
 
-        user_info = userinfo_response.json()
+            if userinfo_response.status_code != 200:
+                return _error_html_page("Failed to get user info from Google.")
+
+            try:
+                user_info = userinfo_response.json()
+            except Exception:
+                logger.error("Userinfo response parse failed: %s", userinfo_response.text[:500])
+                return _error_html_page("Invalid user info response from Google.")
+
+    except httpx.TimeoutException:
+        logger.error("Google API timeout")
+        return _error_html_page("Connection timeout. Please try again.")
+    except httpx.ConnectError:
+        logger.error("Google API connection error")
+        return _error_html_page("Network error. Please try again.")
+    except Exception as e:
+        logger.error("Google API unexpected error: %s", str(e), exc_info=True)
+        return _error_html_page("An unexpected error occurred. Please try again.")
 
     google_id = user_info.get("id")
     email = user_info.get("email")
@@ -201,55 +247,64 @@ async def callback_google(
     avatar_url = user_info.get("picture")
 
     if not google_id or not email:
-        raise HTTPException(status_code=400, detail="Incomplete user info from Google")
+        return _error_html_page("Incomplete user info from Google")
 
-    user = db.query(User).filter(User.google_id == google_id).first()
-    is_new_user = False
-
-    if not user:
-        user = db.query(User).filter(User.email == email).first()
+    try:
+        user = db.query(User).filter(User.google_id == google_id).first()
+        is_new_user = False
 
         if not user:
-            is_new_user = True
-            user = User(
-                google_id=google_id,
-                email=email,
-                full_name=full_name,
-                avatar_url=avatar_url,
-                auth_provider="google",
-                tariff_type="free",
-                photo_uses_remaining=0,
-            )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
+            user = db.query(User).filter(User.email == email).first()
 
-            if ref_code:
-                referrer = db.query(User).filter(User.id == ref_code).first()
-                if referrer and referrer.id != user.id:
-                    referral = Referral(
-                        referrer_id=referrer.id,
-                        invited_user_id=user.id
-                    )
-                    db.add(referral)
-                    db.commit()
-                    logger.info("Referral created: referrer=%s invited=%s", referrer.id, user.id)
+            if not user:
+                is_new_user = True
+                user = User(
+                    google_id=google_id,
+                    email=email,
+                    full_name=full_name,
+                    avatar_url=avatar_url,
+                    auth_provider="google",
+                    tariff_type="free",
+                    photo_uses_remaining=0,
+                )
+                db.add(user)
+                db.commit()
+                db.refresh(user)
+
+                if ref_code:
+                    referrer = db.query(User).filter(User.id == ref_code).first()
+                    if referrer and referrer.id != user.id:
+                        referral = Referral(
+                            referrer_id=referrer.id,
+                            invited_user_id=user.id
+                        )
+                        db.add(referral)
+                        db.commit()
+                        logger.info("Referral created: referrer=%s invited=%s", referrer.id, user.id)
+            else:
+                user.google_id = google_id
+                user.auth_provider = "google"
+                if full_name and not user.full_name:
+                    user.full_name = full_name
+                if avatar_url and not user.avatar_url:
+                    user.avatar_url = avatar_url
+                db.commit()
         else:
-            user.google_id = google_id
-            user.auth_provider = "google"
-            if full_name and not user.full_name:
+            if full_name:
                 user.full_name = full_name
-            if avatar_url and not user.avatar_url:
+            if avatar_url:
                 user.avatar_url = avatar_url
             db.commit()
-    else:
-        if full_name:
-            user.full_name = full_name
-        if avatar_url:
-            user.avatar_url = avatar_url
-        db.commit()
+    except Exception as e:
+        logger.error("Database error during auth: %s", str(e), exc_info=True)
+        db.rollback()
+        return _error_html_page("Failed to save user data. Please try again.")
 
-    token = create_access_token(user.id)
+    try:
+        token = create_access_token(user.id)
+    except Exception as e:
+        logger.error("JWT creation failed: %s", str(e), exc_info=True)
+        return _error_html_page("Failed to create session. Please try again.")
 
     logger.info("User authenticated: id=%s email=%s is_new=%s", user.id, user.email, is_new_user)
 

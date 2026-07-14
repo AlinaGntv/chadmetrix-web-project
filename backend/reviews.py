@@ -175,7 +175,7 @@ async def get_reviews(
             "comment": review.comment,
             "created_at": review.created_at,
             "admin_reply": review.admin_reply,
-            "admin_reply_at": review.admin_replied_at,
+            "admin_replied_at": review.admin_replied_at,
             "admin_replied_by": admin_info
         })
     
@@ -438,7 +438,7 @@ async def edit_admin_reply(
     return {
         "message": "Ответ обновлён",
         "reply": review.admin_reply,
-        "replied_at": review.admin_reply_at
+        "replied_at": review.admin_replied_at
     }
 
 # =============================================================================
